@@ -34,7 +34,10 @@ program
     .option('-u, --user-agent <string>', 'Custom user agent')
     .option('--cache-dir <path>', 'Cache directory', '.cache')
     .option('-t, --timeout <ms>', 'Request timeout in milliseconds', '30000')
-    .option('--cookies-file <path>', 'Path to Netscape cookie file for authenticated pages')
+    .option(
+        '--cookies-file <path>',
+        'Path to Netscape cookie file for authenticated pages'
+    )
     .option(
         '-o, --output <format>',
         'Output format: json, markdown, or both',
@@ -44,7 +47,7 @@ program
         try {
             const pages = parseInt(options.pages, 10);
             const depth = pages > 1 ? 1 : 0; // If more than 1 page requested, crawl 1 level deep
-            
+
             const crawlOptions: CrawlOptions = {
                 depth: depth,
                 maxConcurrency: parseInt(options.concurrency, 10),
@@ -60,7 +63,7 @@ program
             }
 
             console.error(`Fetching ${url}...`);
-            
+
             if (options.output === 'json') {
                 const results = await fetch(url, crawlOptions);
                 console.log(JSON.stringify(results, null, 2));
@@ -69,12 +72,12 @@ program
                     ...crawlOptions,
                     maxPages: pages,
                 });
-                
+
                 // Output the combined markdown
                 if (result.markdown) {
                     console.log(result.markdown);
                 }
-                
+
                 // Show error if any
                 if (result.error) {
                     console.error(`Error: ${result.error}`);
@@ -119,7 +122,9 @@ program
 
 program
     .command('serve')
-    .description('Run as an MCP server')
+    .description(
+        'Run as an MCP server (set MCP_TRANSPORT=streamable-http for HTTP transport; use --port or PORT to change the port)'
+    )
     .action(async () => {
         // Import and run the serve module
         await import('./serve.js');
