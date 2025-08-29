@@ -30,26 +30,6 @@ let fetchMarkdownModule: any;
 let fsPromises: any;
 let pathModule: any;
 
-logger.debug('Creating MCP server instance...');
-const server = new Server(
-    {
-        name: 'read-website-fast',
-        version: '0.1.0',
-    },
-    {
-        capabilities: {
-            tools: {},
-            resources: {},
-        },
-    }
-);
-logger.info('MCP server instance created successfully');
-
-// Add error handling for the server instance
-server.onerror = error => {
-    logger.error('MCP Server Error:', error);
-};
-
 // Tool definition
 const READ_WEBSITE_TOOL: Tool = {
     name: 'read_website',
@@ -103,21 +83,42 @@ const RESOURCES: Resource[] = [
     },
 ];
 
-// Handle tool listing
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    logger.debug('Received ListTools request');
-    const response = {
-        tools: [READ_WEBSITE_TOOL],
-    };
-    logger.debug(
-        'Returning tools:',
-        response.tools.map(t => t.name)
+function createMcpServer(): Server {
+    logger.debug('Creating MCP server instance...');
+    const server = new Server(
+        {
+            name: 'read-website-fast',
+            version: '0.1.0',
+        },
+        {
+            capabilities: {
+                tools: {},
+                resources: {},
+            },
+        }
     );
-    return response;
-});
+    logger.info('MCP server instance created successfully');
 
-// Handle tool execution
-server.setRequestHandler(CallToolRequestSchema, async request => {
+    // Add error handling for the server instance
+    server.onerror = error => {
+        logger.error('MCP Server Error:', error);
+    };
+
+    // Handle tool listing
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+        logger.debug('Received ListTools request');
+        const response = {
+            tools: [READ_WEBSITE_TOOL],
+        };
+        logger.debug(
+            'Returning tools:',
+            response.tools.map(t => t.name)
+        );
+        return response;
+    });
+
+    // Handle tool execution
+    server.setRequestHandler(CallToolRequestSchema, async request => {
     logger.info('Received CallTool request:', request.params.name);
     logger.debug('Request params:', JSON.stringify(request.params, null, 2));
 
@@ -198,18 +199,18 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
             `Failed to fetch content: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
     }
-});
+    });
 
-// Handle resource listing
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    logger.debug('Received ListResources request');
-    return {
-        resources: RESOURCES,
-    };
-});
+    // Handle resource listing
+    server.setRequestHandler(ListResourcesRequestSchema, async () => {
+        logger.debug('Received ListResources request');
+        return {
+            resources: RESOURCES,
+        };
+    });
 
-// Handle resource reading
-server.setRequestHandler(ReadResourceRequestSchema, async request => {
+    // Handle resource reading
+    server.setRequestHandler(ReadResourceRequestSchema, async request => {
     logger.debug('Received ReadResource request:', request.params);
     const uri = request.params.uri;
 
@@ -320,7 +321,10 @@ server.setRequestHandler(ReadResourceRequestSchema, async request => {
     }
 
     throw new Error(`Unknown resource: ${uri}`);
-});
+    });
+
+    return server;
+}
 
 // Start the server
 async function runServer() {
@@ -335,41 +339,71 @@ async function runServer() {
             }...`
         );
 
-        const transport = useHttp
-            ? new StreamableHTTPServerTransport({
-                  sessionIdGenerator: undefined,
-              })
-            : new StdioServerTransport();
-        logger.debug('Transport created, connecting to server...');
-
-        // Add transport error handling
-        transport.onerror = error => {
-            logger.error('Transport Error:', error);
-            // Don't exit on transport errors unless it's a connection close
-            if (error?.message?.includes('Connection closed')) {
-                logger.info('Connection closed by client');
-                process.exit(0);
-            }
-        };
-
         let httpServer: HTTPServer | undefined;
         let port: number | undefined;
+        let stdioServer: Server | undefined;
+        let stdioTransport: StdioServerTransport | undefined;
+
         if (useHttp) {
             port = parseInt(process.env.PORT || '3000', 10);
             httpServer = createServer((req, res) => {
-                (transport as StreamableHTTPServerTransport)
-                    .handleRequest(req, res)
-                    .catch((err: unknown) => {
-                        logger.error('HTTP request error:', err);
+                (async () => {
+                    // Create a fresh transport and server per request to avoid
+                    // JSON-RPC ID collisions across concurrent clients
+                    const transport = new StreamableHTTPServerTransport({
+                        sessionIdGenerator: undefined,
                     });
+                    transport.onerror = error => {
+                        logger.error('Transport Error:', error);
+                    };
+                    const server = createMcpServer();
+                    res.on('close', () => {
+                        server.close().catch(err => {
+                            logger.error('Error closing server:', err);
+                        });
+                    });
+                    try {
+                        await server.connect(transport);
+                        await transport.handleRequest(req, res);
+                    } catch (err) {
+                        logger.error('HTTP request error:', err);
+                    }
+                })();
             });
+        } else {
+            stdioTransport = new StdioServerTransport();
+            stdioTransport.onerror = error => {
+                logger.error('Transport Error:', error);
+                // Don't exit on transport errors unless it's a connection close
+                if (error?.message?.includes('Connection closed')) {
+                    logger.info('Connection closed by client');
+                    process.exit(0);
+                }
+            };
+
+            stdioServer = createMcpServer();
+
+            process.stdin.on('end', () => {
+                logger.info('Stdin closed, shutting down...');
+                // Give a small delay to ensure any final messages are sent
+                setTimeout(() => process.exit(0), 100);
+            });
+
+            process.stdin.on('error', error => {
+                logger.warn('Stdin error:', error);
+                // Don't exit on stdin errors
+            });
+
+            await stdioServer.connect(stdioTransport);
         }
 
         // Handle graceful shutdown
         const cleanup = async (signal: string) => {
             logger.info(`Received ${signal}, shutting down gracefully...`);
             try {
-                await server.close();
+                if (stdioServer) {
+                    await stdioServer.close();
+                }
                 if (httpServer) {
                     await new Promise(resolve => httpServer!.close(resolve));
                     logger.info('HTTP server closed');
@@ -416,26 +450,12 @@ async function runServer() {
             logger.debug('Warning details:', warning);
         });
 
-        // Handle stdin closure only when using stdio transport
-        if (!useHttp) {
-            process.stdin.on('end', () => {
-                logger.info('Stdin closed, shutting down...');
-                // Give a small delay to ensure any final messages are sent
-                setTimeout(() => process.exit(0), 100);
-            });
-
-            process.stdin.on('error', error => {
-                logger.warn('Stdin error:', error);
-                // Don't exit on stdin errors
-            });
-        }
-
-        await server.connect(transport);
         if (httpServer && port !== undefined) {
             httpServer.listen(port, () => {
                 logger.info(`HTTP transport listening on port ${port}`);
             });
         }
+
         logger.info('MCP server connected and running successfully!');
         logger.info('Ready to receive requests');
         logger.debug('Server details:', {
