@@ -9,8 +9,8 @@ const __dirname = dirname(__filename);
 const args = process.argv.slice(2);
 
 async function main() {
-  // Default to 'serve' if no arguments provided (for MCP usage)
-  const command = args[0] || 'serve';
+  // Default to 'serve' if no command or first arg is an option
+  const command = args[0] && !args[0].startsWith('-') ? args[0] : 'serve';
   
   // Check if compiled dist exists
   const distExists = existsSync(join(__dirname, '..', 'dist'));

@@ -78,6 +78,16 @@ Drop this into your client’s mcp.json (e.g. .vscode/mcp.json, ~/.cursor/mcp.js
 
 
 
+### Streamable HTTP transport
+
+By default the server uses stdio. To run it over HTTP instead:
+
+```bash
+MCP_TRANSPORT=streamable-http npx -y @just-every/mcp-read-website-fast --port 8080
+```
+
+The server listens on port `3000` by default. Override it with `--port` or the `PORT` env variable.
+
 ## Features
 
 - **Fast startup** using official MCP SDK with lazy loading for optimal performance

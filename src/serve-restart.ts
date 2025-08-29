@@ -6,6 +6,18 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Allow setting PORT via --port flag
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--port' || arg === '-p') {
+        const value = args[i + 1];
+        if (value) process.env.PORT = value;
+    } else if (arg.startsWith('--port=')) {
+        process.env.PORT = arg.split('=')[1];
+    }
+}
+
 // Configuration
 const MAX_RESTART_ATTEMPTS = 10;
 const RESTART_WINDOW_MS = 60000; // 1 minute
