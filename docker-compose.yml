@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+    mcp-read-website-fast:
+        build: .
+        container_name: mcp-read-website-fast
+        ports:
+            - '3000:3000'
+        environment:
+            # Transport configuration
+            - MCP_TRANSPORT=streamable-http
+            - PORT=3000
+
+            # Logging configuration
+            - LOG_LEVEL=${LOG_LEVEL:-info}
+            - MCP_DEBUG=${MCP_DEBUG:-0}
+            - MCP_QUIET=${MCP_QUIET:-false}
+
+            # Server configuration
+            - NODE_ENV=${NODE_ENV:-production}
+
+            # Debug overrides (can be set in .env file)
+            - DEBUG_LEVEL=${DEBUG_LEVEL:-info}
+            - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+        volumes:
+            - mcp-cache:/app/.cache
+            # Optional: mount source code for development
+            - ${PWD:-.}/src:/app/src:ro
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD', 'node', '-e', 'process.exit(0)']
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+
+    # Development profile with enhanced debugging
+    mcp-read-website-fast-dev:
+        build: .
+        container_name: mcp-read-website-fast-dev
+        ports:
+            - '3001:3000'
+        environment:
+            # Transport configuration
+            - MCP_TRANSPORT=streamable-http
+            - PORT=3000
+
+            # Enhanced debugging for development
+            - LOG_LEVEL=debug
+            - MCP_DEBUG=1
+            - MCP_QUIET=false
+            - NODE_ENV=development
+            - VERBOSE_LOGGING=true
+
+            # Development-specific settings
+            - DEBUG_LEVEL=debug
+            - NODE_OPTIONS=--inspect=0.0.0.0:9229
+        volumes:
+            - mcp-cache:/app/.cache
+            # Mount source code for live development
+            - ${PWD:-.}/src:/app/src:ro
+            - ${PWD:-.}/dist:/app/dist:ro
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD', 'node', '-e', 'process.exit(0)']
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+        profiles:
+            - development
+
+volumes:
+    mcp-cache:
+        driver: local

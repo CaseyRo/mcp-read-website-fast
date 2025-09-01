@@ -25,10 +25,21 @@ This file documents key architectural notes for the `mcp-read-website-fast` proj
 
 ## Debugging Tips
 - Start the MCP server in development mode with `npm run serve:dev` for interactive debugging.
+- Start the MCP server with streamable HTTP transport using `MCP_TRANSPORT=streamable-http npm run serve -- --port <port>`.
 - Fetch individual URLs via `npm run dev fetch <url>` to reproduce issues.
 - Enable verbose logging by setting `LOG_LEVEL=debug` or `MCP_DEBUG=1`.
 - Clear caches with `npm run dev clear-cache` when testing repeated fetches.
 - Run the test suite with `npm test` to verify changes.
+
+## Docker Deployment
+- Use `docker-compose up -d` for production deployment with automatic restarts.
+- The Docker container runs with HTTP transport by default (`MCP_TRANSPORT=streamable-http`).
+- Cache is persisted via Docker volumes for better performance across restarts.
+- Health checks ensure the container is restarted if the MCP server becomes unresponsive.
+- Non-root user security and proper signal handling via dumb-init.
+- **Debugging**: Use `docker-compose --profile development up -d` for enhanced debugging with debug logging and Node.js inspector.
+- **Profiles**: Production profile (port 3000) and development profile (port 3001) with different logging levels.
+- **Environment Variables**: Comprehensive logging configuration via `LOG_LEVEL`, `MCP_DEBUG`, and `MCP_QUIET`.
 
 ## Maintenance
 - Keep this document up to date. Whenever architecture evolves or investigations uncover new behaviors, add notes here so future contributors understand the rationale and debugging strategies.
