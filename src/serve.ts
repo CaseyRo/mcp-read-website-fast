@@ -15,7 +15,7 @@ import {
 import { logger } from './utils/logger.js';
 
 // MCP server logger will automatically be quiet unless MCP_DEBUG is set
-logger.info('MCP Server starting up...');
+logger.info('🚀 MCP Server starting up...');
 logger.debug('Node version:', process.version);
 logger.debug('Working directory:', process.cwd());
 logger.debug('Environment:', { LOG_LEVEL: process.env.LOG_LEVEL });
@@ -30,7 +30,7 @@ let fetchMarkdownModule: any;
 let fsPromises: any;
 let pathModule: any;
 
-logger.debug('Creating MCP server instance...');
+logger.debug('🔧 Creating MCP server instance...');
 const server = new Server(
     {
         name: 'read-website-fast',
@@ -43,7 +43,7 @@ const server = new Server(
         },
     }
 );
-logger.info('MCP server instance created successfully');
+logger.success('MCP server instance created successfully');
 
 // Add error handling for the server instance
 server.onerror = error => {
@@ -162,7 +162,12 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
             maxPages: args.pages ?? 1,
             cookiesFile: args.cookiesFile,
         });
-        logger.info('Content fetched successfully');
+        logger.success('✅ Content fetched successfully');
+
+        // Show markdown preview when LOG_LEVEL is info or higher
+        if (result.markdown) {
+            logger.markdownPreview(result.markdown, 300);
+        }
 
         // If there's an error but we still have some content, return it with a note
         if (result.error && result.markdown) {
@@ -202,7 +207,11 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
 
 // Handle resource listing
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    logger.debug('Received ListResources request');
+    logger.info('📋 Received ListResources request');
+    logger.debug(
+        '📋 Returning resources:',
+        RESOURCES.map(r => r.uri)
+    );
     return {
         resources: RESOURCES,
     };
@@ -438,10 +447,17 @@ async function runServer() {
         }
         logger.info('MCP server connected and running successfully!');
         logger.info('Ready to receive requests');
+        logger.info('Available tools:', READ_WEBSITE_TOOL.name);
+        logger.info(
+            'Available resources:',
+            RESOURCES.map(r => r.uri)
+        );
         logger.debug('Server details:', {
             name: 'read-website-fast',
             version: '0.1.0',
             pid: process.pid,
+            transport: useHttp ? 'HTTP' : 'STDIO',
+            port: useHttp ? port : 'N/A',
         });
 
         // Log heartbeat every 30 seconds to show server is alive

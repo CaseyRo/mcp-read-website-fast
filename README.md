@@ -76,17 +76,128 @@ Or, in the chat window, type /add and fill in the same JSON—both paths land th
 
 Drop this into your client’s mcp.json (e.g. .vscode/mcp.json, ~/.cursor/mcp.json, or .mcp.json for Claude).
 
+## Docker
 
+### Quick Start
+
+```bash
+# Build and run with Docker Compose (recommended)
+docker-compose up -d
+
+# Or build and run manually
+docker build -t mcp-read-website-fast .
+docker run -d -p 3000:3000 -e MCP_TRANSPORT=streamable-http --name mcp-server mcp-read-website-fast
+```
+
+### Docker Compose
+
+The included `docker-compose.yml` provides a production-ready setup with debugging options:
+
+```bash
+# Start production server
+docker-compose --profile production up -d
+
+# Start development server with enhanced debugging
+docker-compose --profile development up -d
+
+# Start both profiles
+docker-compose --profile production --profile development up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the server
+docker-compose down
+
+# Rebuild and restart
+docker-compose up -d --build
+```
+
+### Environment Variables
+
+The Docker setup supports comprehensive environment variable configuration:
+
+#### Transport Configuration
+- `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
+- `PORT=3000` - HTTP server port (default: 3000)
+
+#### Logging Configuration
+- `LOG_LEVEL=info` - Logging level (error, warn, info, debug)
+- `MCP_DEBUG=0` - MCP debug mode (0=off, 1=on)
+- `MCP_QUIET=false` - MCP quiet mode (true/false)
+
+#### Server Configuration
+- `NODE_ENV=production` - Node.js environment (production/development)
+- `DEBUG_LEVEL=info` - Debug level override
+- `VERBOSE_LOGGING=false` - Enable verbose logging
+
+#### Development Settings
+- `NODE_OPTIONS=--inspect=0.0.0.0:9229` - Enable Node.js inspector for debugging
+
+### Docker Profiles
+
+#### Production Profile (default)
+- Port: 3000
+- Logging: Info level
+- Environment: Production
+- Optimized for performance
+
+#### Development Profile
+- Port: 3001 (to avoid conflicts)
+- Logging: Debug level
+- Environment: Development
+- Enhanced debugging enabled
+- Source code mounted for live development
+- Node.js inspector enabled
+
+### Custom Port
+
+```bash
+# Run on custom port
+docker run -d -p 8080:8080 \
+  -e MCP_TRANSPORT=streamable-http \
+  -e PORT=8080 \
+  --name mcp-server \
+  mcp-read-website-fast
+```
+
+### Debugging with Docker
+
+```bash
+# Start with debug logging
+LOG_LEVEL=debug docker-compose up -d
+
+# Start with MCP debugging enabled
+MCP_DEBUG=1 docker-compose up -d
+
+# Start development profile for maximum debugging
+docker-compose --profile development up -d
+
+# View debug logs
+docker-compose logs -f mcp-read-website-fast-dev
+
+# Connect to Node.js inspector (development profile)
+# Open http://localhost:9229 in Chrome DevTools
+```
 
 ### Streamable HTTP transport
 
 By default the server uses stdio. To run it over HTTP instead:
 
 ```bash
-MCP_TRANSPORT=streamable-http npx -y @just-every/mcp-read-website-fast --port 8080
+# From the project root folder
+MCP_TRANSPORT=streamable-http npm run serve -- --port 8080
+
+# Or directly with the restart wrapper
+MCP_TRANSPORT=streamable-http node dist/serve-restart.js --port 8080
+
+# Build and run in one command
+npm run build && MCP_TRANSPORT=streamable-http node dist/serve-restart.js --port 8080
 ```
 
-The server listens on port `3000` by default. Override it with `--port` or the `PORT` env variable.
+The server listens on port `3000` by default. Override it with `--port` or the `PORT` environment variable.
+
+**Note:** The `--port` flag is only supported when using `npm run serve` or running `serve-restart.js` directly. It is not supported with the main CLI commands.
 
 ## Features
 
