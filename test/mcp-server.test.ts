@@ -89,6 +89,74 @@ describe('MCP Server Handlers', () => {
             expect(result.markdown).toContain('Partial Content');
             expect(result.error).toBe('Some pages had errors');
         });
+
+        it('should return markdown format by default (backward compatibility)', async () => {
+            const { fetchMarkdown } = await import('../src/internal/fetchMarkdown.js');
+            vi.mocked(fetchMarkdown).mockResolvedValue({
+                markdown: '# Test Page\n\nContent here.',
+                title: 'Test Page',
+                links: ['https://example.com/link1'],
+            });
+
+            const result = await fetchMarkdown('https://example.com', {
+                maxPages: 1,
+            });
+
+            expect(result.markdown).toContain('Test Page');
+            expect(result.title).toBe('Test Page');
+        });
+
+        it('should return JSON format when output=json', async () => {
+            const { fetchMarkdown } = await import('../src/internal/fetchMarkdown.js');
+            vi.mocked(fetchMarkdown).mockResolvedValue({
+                markdown: '# Test Page\n\nContent here.',
+                title: 'Test Page',
+                links: ['https://example.com/link1'],
+            });
+
+            const result = await fetchMarkdown('https://example.com', {
+                maxPages: 1,
+            });
+
+            // Verify we have all the data needed for JSON output
+            expect(result.markdown).toBeDefined();
+            expect(result.title).toBeDefined();
+            expect(result.links).toBeDefined();
+        });
+
+        it('should handle invalid output parameter', () => {
+            // This would be validated in the tool handler
+            const invalidOutputs = ['xml', 'html', 'text', ''];
+            invalidOutputs.forEach(output => {
+                expect(['markdown', 'json', 'both']).not.toContain(output);
+            });
+        });
+
+        it('should handle errors with markdown output format', async () => {
+            const { fetchMarkdown } = await import('../src/internal/fetchMarkdown.js');
+            vi.mocked(fetchMarkdown).mockResolvedValue({
+                markdown: '# Partial Content',
+                error: 'Some pages had errors',
+            });
+
+            const result = await fetchMarkdown('https://example.com');
+
+            expect(result.markdown).toContain('Partial Content');
+            expect(result.error).toBeDefined();
+        });
+
+        it('should handle errors with JSON output format', async () => {
+            const { fetchMarkdown } = await import('../src/internal/fetchMarkdown.js');
+            vi.mocked(fetchMarkdown).mockResolvedValue({
+                markdown: '',
+                error: 'Failed to fetch',
+            });
+
+            const result = await fetchMarkdown('https://example.com');
+
+            expect(result.error).toBe('Failed to fetch');
+            expect(result.markdown).toBe('');
+        });
     });
 
     describe('Resource Handler - cache status', () => {

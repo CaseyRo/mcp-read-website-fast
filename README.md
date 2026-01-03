@@ -181,6 +181,10 @@ The server listens on port `3000` by default. Override it with the `PORT` enviro
   - Parameters:
     - `url` (required): The HTTP/HTTPS URL to fetch
     - `pages` (optional): Maximum number of pages to crawl (default: 1, max: 100)
+    - `output` (optional): Output format - `"markdown"` (default), `"json"` (structured data with metadata), or `"both"` (returns both formats)
+      - `"markdown"`: Returns markdown text content (default, backward compatible)
+      - `"json"`: Returns structured JSON with fields: `markdown`, `title`, `links`, `url`, `error`
+      - `"both"`: Returns both markdown and JSON formats in separate content items
 
 ### Available Resources
 
