@@ -1,23 +1,5 @@
-# Multi-stage build for lean production image
-FROM node:20-alpine AS builder
-
-# Set working directory
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install ALL dependencies (including dev dependencies for building)
-RUN npm ci && npm cache clean --force
-
-# Copy source code
-COPY . .
-
-# Build the project
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine AS production
+# Single-stage build using pre-built dist/ from git
+FROM node:20-alpine
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
@@ -29,10 +11,9 @@ RUN addgroup -g 1001 -S nodejs && \
 # Set working directory
 WORKDIR /app
 
-# Copy built application from builder stage
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/bin ./bin
-COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+# Copy pre-built dist/ and package files from git
+COPY --chown=nodejs:nodejs dist ./dist
+COPY --chown=nodejs:nodejs package*.json ./
 
 # Install only production dependencies
 RUN npm ci --only=production && npm cache clean --force

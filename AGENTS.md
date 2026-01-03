@@ -53,8 +53,8 @@ This file documents key architectural notes for the `mcp-read-website-fast` proj
 - Cache is persisted via Docker volumes for better performance across restarts.
 - Health checks ensure the container is restarted if the MCP server becomes unresponsive.
 - Non-root user security and proper signal handling via dumb-init.
-- **Debugging**: Use `docker-compose --profile development up -d` for enhanced debugging with debug logging and Node.js inspector.
-- **Profiles**: Production profile (port 3000) and development profile (port 3001) with different logging levels.
+- **Optimized Build**: Docker uses pre-built `dist/` from git for faster builds (single-stage, no TypeScript compilation).
+- **Debugging**: Enable debug logging via `LOG_LEVEL=debug` or `MCP_DEBUG=1` environment variables. Node.js inspector can be enabled with `NODE_OPTIONS=--inspect=0.0.0.0:9229`.
 - **Environment Variables**: Comprehensive logging configuration via `LOG_LEVEL`, `MCP_DEBUG`, and `MCP_QUIET`.
 
 ## Maintenance
