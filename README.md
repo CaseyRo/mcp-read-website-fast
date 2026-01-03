@@ -75,19 +75,15 @@ docker build -t mcp-read-website-fast .
 docker run -d -p 3000:3000 --name mcp-server mcp-read-website-fast
 ```
 
+**Note**: The Docker build uses pre-built `dist/` files from git for faster builds. Ensure `dist/` is up-to-date before building.
+
 ### Docker Compose
 
-The included `docker-compose.yml` provides a production-ready setup with debugging options:
+The included `docker-compose.yml` provides a production-ready setup:
 
 ```bash
-# Start production server
-docker-compose --profile production up -d
-
-# Start development server with enhanced debugging
-docker-compose --profile development up -d
-
-# Start both profiles
-docker-compose --profile production --profile development up -d
+# Start server
+docker-compose up -d
 
 # View logs
 docker-compose logs -f
@@ -117,23 +113,7 @@ The Docker setup supports comprehensive environment variable configuration:
 - `VERBOSE_LOGGING=false` - Enable verbose logging
 
 #### Development Settings
-- `NODE_OPTIONS=--inspect=0.0.0.0:9229` - Enable Node.js inspector for debugging
-
-### Docker Profiles
-
-#### Production Profile (default)
-- Port: 3000
-- Logging: Info level
-- Environment: Production
-- Optimized for performance
-
-#### Development Profile
-- Port: 3001 (to avoid conflicts)
-- Logging: Debug level
-- Environment: Development
-- Enhanced debugging enabled
-- Source code mounted for live development
-- Node.js inspector enabled
+- `NODE_OPTIONS=--inspect=0.0.0.0:9229` - Enable Node.js inspector for debugging (can be set via environment variable)
 
 ### Custom Port
 
@@ -154,13 +134,13 @@ LOG_LEVEL=debug docker-compose up -d
 # Start with MCP debugging enabled
 MCP_DEBUG=1 docker-compose up -d
 
-# Start development profile for maximum debugging
-docker-compose --profile development up -d
+# Start with Node.js inspector enabled
+NODE_OPTIONS=--inspect=0.0.0.0:9229 docker-compose up -d
 
 # View debug logs
-docker-compose logs -f mcp-read-website-fast-dev
+docker-compose logs -f
 
-# Connect to Node.js inspector (development profile)
+# Connect to Node.js inspector (if enabled)
 # Open http://localhost:9229 in Chrome DevTools
 ```
 
