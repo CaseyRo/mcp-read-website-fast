@@ -13,9 +13,11 @@ Fast, token-efficient web content extraction for AI agents - converts websites t
 
 Existing MCP web crawlers are slow and consume large quantities of tokens. This pauses the development process and provides incomplete results as LLMs need to parse whole web pages.
 
-This MCP package fetches web pages locally, strips noise, and converts content to clean Markdown while preserving links. Designed for Claude Code, IDEs and LLM pipelines with minimal token footprint. Crawl sites locally with minimal dependencies.
+This MCP package fetches web pages locally, strips noise, and converts content to clean Markdown while preserving links. Designed for HTTP-based MCP clients and LLM pipelines with minimal token footprint. Crawl sites locally with minimal dependencies.
 
 **Note:** This package now uses [@just-every/crawl](https://www.npmjs.com/package/@just-every/crawl) for its core crawling and markdown conversion functionality.
+
+**⚠️ Breaking Change (v1.0.0)**: This server now runs exclusively via HTTP transport. Stdio transport for IDE integration (Cursor, VS Code, Claude Code, JetBrains) is no longer supported. All clients must connect via HTTP.
 
 ## Features
 
@@ -27,54 +29,38 @@ This MCP package fetches web pages locally, strips noise, and converts content t
 - **Concurrent fetching** with configurable depth crawling
 - **Stream-first design** for low memory usage
 - **Link preservation** for knowledge graphs
-- **Optional chunking** for downstream processing
 
 ## Installation
 
-### Claude Code
+### HTTP Transport Only
+
+This MCP server runs exclusively via HTTP streamable transport. It does not support stdio transport for IDE integration.
+
+### Docker Deployment (Recommended)
+
+The easiest way to run the server is using Docker:
 
 ```bash
-claude mcp add read-website-fast -s user -- npx -y @just-every/mcp-read-website-fast
+docker-compose up -d
 ```
 
-### VS Code
+See the [Docker](#docker) section below for detailed configuration options.
+
+### Manual HTTP Server
+
+Start the server manually:
 
 ```bash
-code --add-mcp '{"name":"read-website-fast","command":"npx","args":["-y","@just-every/mcp-read-website-fast"]}'
+npm run serve
+# Or with custom port
+PORT=8080 npm run serve
 ```
 
-### Cursor
+The server will listen on port 3000 by default (or the port specified by the `PORT` environment variable).
 
-```bash
-cursor://anysphere.cursor-deeplink/mcp/install?name=read-website-fast&config=eyJyZWFkLXdlYnNpdGUtZmFzdCI6eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBqdXN0LWV2ZXJ5L21jcC1yZWFkLXdlYnNpdGUtZmFzdCJdfX0=
-```
+### MCP Client Configuration
 
-### JetBrains IDEs
-
-Settings → Tools → AI Assistant → Model Context Protocol (MCP) → Add
-
-Choose “As JSON” and paste:
-
-```json
-{"command":"npx","args":["-y","@just-every/mcp-read-website-fast"]}
-```
-
-Or, in the chat window, type /add and fill in the same JSON—both paths land the server in a single step. ￼
-
-### Raw JSON (works in any MCP client)
-
-```json
-{
-  "mcpServers": {
-    "read-website-fast": {
-      "command": "npx",
-      "args": ["-y", "@just-every/mcp-read-website-fast"]
-    }
-  }
-}
-```
-
-Drop this into your client’s mcp.json (e.g. .vscode/mcp.json, ~/.cursor/mcp.json, or .mcp.json for Claude).
+Configure your HTTP-capable MCP client to connect to the server endpoint. The server exposes the MCP protocol over HTTP at `http://localhost:3000` (or your configured port).
 
 ## Docker
 
@@ -86,7 +72,7 @@ docker-compose up -d
 
 # Or build and run manually
 docker build -t mcp-read-website-fast .
-docker run -d -p 3000:3000 -e MCP_TRANSPORT=streamable-http --name mcp-server mcp-read-website-fast
+docker run -d -p 3000:3000 --name mcp-server mcp-read-website-fast
 ```
 
 ### Docker Compose
@@ -118,7 +104,6 @@ docker-compose up -d --build
 The Docker setup supports comprehensive environment variable configuration:
 
 #### Transport Configuration
-- `MCP_TRANSPORT=streamable-http` - Enables HTTP transport (required for Docker)
 - `PORT=3000` - HTTP server port (default: 3000)
 
 #### Logging Configuration
@@ -155,7 +140,6 @@ The Docker setup supports comprehensive environment variable configuration:
 ```bash
 # Run on custom port
 docker run -d -p 8080:8080 \
-  -e MCP_TRANSPORT=streamable-http \
   -e PORT=8080 \
   --name mcp-server \
   mcp-read-website-fast
@@ -180,24 +164,25 @@ docker-compose logs -f mcp-read-website-fast-dev
 # Open http://localhost:9229 in Chrome DevTools
 ```
 
-### Streamable HTTP transport
+### HTTP Transport
 
-By default the server uses stdio. To run it over HTTP instead:
+The server runs exclusively via HTTP streamable transport. It automatically starts an HTTP server on the configured port.
 
 ```bash
-# From the project root folder
-MCP_TRANSPORT=streamable-http npm run serve -- --port 8080
+# Start server (default port 3000)
+npm run serve
 
-# Or directly with the restart wrapper
-MCP_TRANSPORT=streamable-http node dist/serve-restart.js --port 8080
+# Start with custom port
+PORT=8080 npm run serve
 
-# Build and run in one command
-npm run build && MCP_TRANSPORT=streamable-http node dist/serve-restart.js --port 8080
+# Or using the restart wrapper directly
+node dist/serve-restart.js
+PORT=8080 node dist/serve-restart.js
 ```
 
-The server listens on port `3000` by default. Override it with `--port` or the `PORT` environment variable.
+The server listens on port `3000` by default. Override it with the `PORT` environment variable.
 
-**Note:** The `--port` flag is only supported when using `npm run serve` or running `serve-restart.js` directly. It is not supported with the main CLI commands.
+**Note:** This server only supports HTTP transport. Stdio transport for IDE integration is not supported.
 
 ## Features
 
@@ -209,7 +194,6 @@ The server listens on port `3000` by default. Override it with `--port` or the `
 - **Concurrent fetching** with configurable depth crawling
 - **Stream-first design** for low memory usage
 - **Link preservation** for knowledge graphs
-- **Optional chunking** for downstream processing
 
 ### Available Tools
 
@@ -289,15 +273,16 @@ npm run serve:dev
 ## Architecture
 
 ```
-mcp/
+mcp-read-website-fast/
 ├── src/
-│   ├── crawler/        # URL fetching, queue management, robots.txt
-│   ├── parser/         # DOM parsing, Readability, Turndown conversion
-│   ├── cache/          # Disk-based caching with SHA-256 keys
-│   ├── utils/          # Logger, chunker utilities
-│   ├── index.ts        # CLI entry point
-│   ├── serve.ts        # MCP server entry point
-│   └── serve-restart.ts # Auto-restart wrapper
+│   ├── internal/
+│   │   └── fetchMarkdown.ts  # Core API using @just-every/crawl
+│   ├── utils/
+│   │   ├── logger.ts         # Logging utilities
+│   │   └── extractMarkdownLinks.ts  # Link extraction utilities
+│   ├── index.ts              # CLI entry point
+│   ├── serve.ts              # MCP server entry point
+│   └── serve-restart.ts      # Auto-restart wrapper
 ```
 
 ## Development

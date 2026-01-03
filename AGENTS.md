@@ -1,13 +1,29 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
 # Agent Notes
 
 ## Reasoning
 
-- Introduced an `MCP_TRANSPORT` environment variable so the server can switch between stdio and Streamable HTTP transports. Stdio remains the default for compatibility.
-- When `MCP_TRANSPORT=streamable-http`, a lightweight HTTP server is created and requests are passed to the MCP transport. The port can be configured via `PORT` (defaults to `3000`).
-- README and CLI help now document how to launch the server with the Streamable HTTP transport for clients that can't use stdio.
-- Added a `--port` flag so the HTTP port can be set directly when launching via `npx`, which maps to the same `PORT` environment variable.
-
-These notes explain why the environment variable exists and how to run the server in each mode.
+- The server runs exclusively via HTTP streamable transport. Stdio transport has been removed to simplify architecture.
+- The server automatically starts an HTTP server on the configured port (default: 3000, configurable via `PORT` environment variable).
+- All MCP clients must connect via HTTP transport - IDE integration via stdio is no longer supported.
 
 # AGENTS Instructions
 This file documents key architectural notes for the `mcp-read-website-fast` project. Update it whenever architectural changes or significant investigations occur.
@@ -25,7 +41,7 @@ This file documents key architectural notes for the `mcp-read-website-fast` proj
 
 ## Debugging Tips
 - Start the MCP server in development mode with `npm run serve:dev` for interactive debugging.
-- Start the MCP server with streamable HTTP transport using `MCP_TRANSPORT=streamable-http npm run serve -- --port <port>`.
+- Start the MCP server with custom port using `PORT=<port> npm run serve`.
 - Fetch individual URLs via `npm run dev fetch <url>` to reproduce issues.
 - Enable verbose logging by setting `LOG_LEVEL=debug` or `MCP_DEBUG=1`.
 - Clear caches with `npm run dev clear-cache` when testing repeated fetches.
@@ -33,7 +49,7 @@ This file documents key architectural notes for the `mcp-read-website-fast` proj
 
 ## Docker Deployment
 - Use `docker-compose up -d` for production deployment with automatic restarts.
-- The Docker container runs with HTTP transport by default (`MCP_TRANSPORT=streamable-http`).
+- The Docker container runs with HTTP transport (the only supported transport).
 - Cache is persisted via Docker volumes for better performance across restarts.
 - Health checks ensure the container is restarted if the MCP server becomes unresponsive.
 - Non-root user security and proper signal handling via dumb-init.

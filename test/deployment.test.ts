@@ -36,9 +36,10 @@ describe('Deployment Tests', () => {
 
       serverProcess.stderr.on('data', (data) => {
         stderr += data.toString();
-        // Check if server started message appears
-        if (stderr.includes('MCP server connected and running successfully!')) {
+        // Check if server started message appears (HTTP transport)
+        if (stderr.includes('HTTP transport listening on port')) {
           serverProcess.kill();
+          expect(stderr).toContain('HTTP transport listening on port');
           expect(stderr).toContain('MCP server connected and running successfully!');
           resolve();
         }
@@ -48,11 +49,11 @@ describe('Deployment Tests', () => {
         stdout += data.toString();
       });
 
-      // Timeout fallback
+      // Timeout fallback (increased for HTTP server startup)
       setTimeout(() => {
         serverProcess.kill();
         reject(new Error(`Server did not start. stderr: ${stderr}, stdout: ${stdout}`));
-      }, 2000);
+      }, 5000);
 
       serverProcess.on('error', reject);
     });
@@ -70,19 +71,20 @@ describe('Deployment Tests', () => {
 
       binProcess.stderr.on('data', (data) => {
         stderr += data.toString();
-        // Check if server started message appears
-        if (stderr.includes('MCP server connected and running successfully!')) {
+        // Check if server started message appears (HTTP transport)
+        if (stderr.includes('HTTP transport listening on port')) {
           binProcess.kill();
+          expect(stderr).toContain('HTTP transport listening on port');
           expect(stderr).toContain('MCP server connected and running successfully!');
           resolve();
         }
       });
 
-      // Timeout fallback
+      // Timeout fallback (increased for HTTP server startup)
       setTimeout(() => {
         binProcess.kill();
         reject(new Error(`Server did not start via bin. stderr: ${stderr}`));
-      }, 2000);
+      }, 5000);
 
       binProcess.on('error', reject);
     });

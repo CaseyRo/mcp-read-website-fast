@@ -1,6 +1,6 @@
 {
   "name": "@just-every/mcp-read-website-fast",
-  "version": "0.1.20",
+  "version": "1.0.0",
   "description": "Markdown Content Preprocessor - Fetch web pages, extract content, convert to clean Markdown",
   "main": "dist/index.js",
   "bin": {
@@ -53,8 +53,7 @@
     "@just-every/crawl": "^1.0.8",
     "@modelcontextprotocol/sdk": "^1.17.4",
     "chalk": "^5.3.0",
-    "commander": "^14.0.0",
-    "uuid": "^11.1.0"
+    "commander": "^14.0.0"
   },
   "devDependencies": {
     "@types/jsdom": "^21.1.7",

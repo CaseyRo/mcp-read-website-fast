@@ -97,7 +97,11 @@ export class Logger {
             console.error(chalk.gray('─'.repeat(50)));
             console.error(chalk.white(previewText));
             if (truncated) {
-                console.error(chalk.gray(`... (truncated, total length: ${content.length} chars)`));
+                console.error(
+                    chalk.gray(
+                        `... (truncated, total length: ${content.length} chars)`
+                    )
+                );
             }
             console.error(chalk.gray('─'.repeat(50)));
         }

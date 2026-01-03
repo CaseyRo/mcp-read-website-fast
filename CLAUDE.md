@@ -8,13 +8,11 @@ A fast, token-efficient web content extractor that converts web pages to clean M
 
 ## Core Modules & Files
 
-- `src/crawler/`: URL fetching, robots.txt respect, queue management
-- `src/parser/`: Readability extraction, HTML to Markdown conversion
-- `src/cache/`: SHA-256 based file caching system
-- `src/internal/fetchMarkdown.ts`: Core API shared by CLI and MCP
+- `src/internal/fetchMarkdown.ts`: Core API shared by CLI and MCP (uses @just-every/crawl)
 - `src/index.ts`: CLI interface using Commander
-- `src/serve.ts`: MCP server using fastmcp
-- `src/utils/`: Logger and chunking utilities
+- `src/serve.ts`: MCP server using @modelcontextprotocol/sdk
+- `src/serve-restart.ts`: Auto-restart wrapper for MCP server
+- `src/utils/`: Logger and link extraction utilities
 
 ## Commands
 
@@ -46,32 +44,25 @@ This is a TypeScript-based web content extractor that converts web pages to clea
 
 ### Core Components
 
-1. **Fetching & Crawling** (`src/crawler/`):
-   - Uses `undici` for HTTP requests
-   - Respects robots.txt via `robots-parser`
-   - Manages crawl queue with configurable concurrency using `p-limit`
+1. **Web Content Extraction** (via `@just-every/crawl`):
+   - Uses Mozilla Readability for content extraction (Firefox Reader View engine)
+   - HTML to Markdown conversion with Turndown + GFM support
+   - Respects robots.txt and supports rate limiting
+   - SHA-256 based caching with configurable cache directory
+   - Configurable concurrency and timeout limits
 
-2. **Content Extraction** (`src/parser/`):
-   - `@mozilla/readability` for article extraction (Firefox Reader View engine)
-   - `jsdom` for DOM parsing
-   - `turndown` for HTML→Markdown conversion
-   - Converts relative URLs to absolute in markdown output
-
-3. **Caching** (`src/cache/`):
-   - File-based cache using SHA-256 hashes
-   - Stores both metadata and content
-
-4. **Entry Points**:
+2. **Entry Points**:
    - `src/index.ts`: CLI interface using Commander
-   - `src/serve.ts`: MCP server using fastmcp
+   - `src/serve.ts`: MCP server using @modelcontextprotocol/sdk
+   - `src/serve-restart.ts`: Auto-restart wrapper for production
    - `src/internal/fetchMarkdown.ts`: Core API used by both interfaces
 
 ### Key Patterns
 
 - Stream-first design for memory efficiency
 - Lazy loading in MCP server for fast startup
-- URL normalization for consistent caching
-- Configurable concurrency with p-limit
+- URL normalization for consistent caching (handled by @just-every/crawl)
+- Configurable concurrency and timeout limits
 - Automatic relative to absolute URL conversion
 
 ## Pre-Commit Requirements
@@ -140,18 +131,20 @@ Only commit if all commands succeed without errors.
 
 ## Key Utility Functions & APIs
 
-- `fetchMarkdown()`: Core extraction function
-- `CacheManager`: Handles content caching
-- `RobotsChecker`: Validates crawler permissions
-- `MarkdownConverter`: HTML to Markdown conversion
-- `URLNormalizer`: Consistent URL handling
+- `fetchMarkdown()`: Core extraction function in `src/internal/fetchMarkdown.ts`
+- `extractMarkdownLinks()`: Extracts and filters links from markdown content
+- `logger`: Custom logger with colored output (writes to stderr for MCP compatibility)
 
 ## MCP Server Integration
 
 When running as MCP server (`npm run serve`):
 
+**Transport:**
+- HTTP streamable transport only (stdio transport not supported)
+- Server listens on port 3000 by default (configurable via `PORT` environment variable)
+
 **Tools:**
-- `read_website_fast` - Main content extraction tool
+- `read_website` - Main content extraction tool
 
 **Resources:**
 - `read-website-fast://status` - Cache statistics
