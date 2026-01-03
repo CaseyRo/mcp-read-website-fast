@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createServer, Server as HTTPServer } from 'node:http';
+import { createServer } from 'node:http';
 import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
@@ -20,9 +19,7 @@ logger.debug('Node version:', process.version);
 logger.debug('Working directory:', process.cwd());
 logger.debug('Environment:', { LOG_LEVEL: process.env.LOG_LEVEL });
 
-// Ensure the process doesn't exit on stdio errors
-process.stdin.on('error', () => {});
-process.stdout.on('error', () => {});
+// Ensure the process doesn't exit on stderr errors
 process.stderr.on('error', () => {});
 
 // Lazy load heavy dependencies
@@ -34,7 +31,7 @@ logger.debug('🔧 Creating MCP server instance...');
 const server = new Server(
     {
         name: 'read-website-fast',
-        version: '0.1.0',
+        version: '0.1.21',
     },
     {
         capabilities: {
@@ -334,21 +331,12 @@ server.setRequestHandler(ReadResourceRequestSchema, async request => {
 // Start the server
 async function runServer() {
     try {
-        logger.info('Starting MCP server...');
-        const useHttp = process.env.MCP_TRANSPORT === 'streamable-http';
-        logger.debug(
-            `Creating ${
-                useHttp
-                    ? 'StreamableHTTPServerTransport'
-                    : 'StdioServerTransport'
-            }...`
-        );
+        logger.info('Starting MCP server with HTTP transport...');
+        logger.debug('Creating StreamableHTTPServerTransport...');
 
-        const transport = useHttp
-            ? new StreamableHTTPServerTransport({
-                  sessionIdGenerator: undefined,
-              })
-            : new StdioServerTransport();
+        const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+        });
         logger.debug('Transport created, connecting to server...');
 
         // Add transport error handling
@@ -361,28 +349,20 @@ async function runServer() {
             }
         };
 
-        let httpServer: HTTPServer | undefined;
-        let port: number | undefined;
-        if (useHttp) {
-            port = parseInt(process.env.PORT || '3000', 10);
-            httpServer = createServer((req, res) => {
-                (transport as StreamableHTTPServerTransport)
-                    .handleRequest(req, res)
-                    .catch((err: unknown) => {
-                        logger.error('HTTP request error:', err);
-                    });
+        const port = parseInt(process.env.PORT || '3000', 10);
+        const httpServer = createServer((req, res) => {
+            transport.handleRequest(req, res).catch((err: unknown) => {
+                logger.error('HTTP request error:', err);
             });
-        }
+        });
 
         // Handle graceful shutdown
         const cleanup = async (signal: string) => {
             logger.info(`Received ${signal}, shutting down gracefully...`);
             try {
                 await server.close();
-                if (httpServer) {
-                    await new Promise(resolve => httpServer!.close(resolve));
-                    logger.info('HTTP server closed');
-                }
+                await new Promise(resolve => httpServer.close(resolve));
+                logger.info('HTTP server closed');
                 logger.info('Server closed successfully');
                 process.exit(0);
             } catch (error) {
@@ -394,17 +374,11 @@ async function runServer() {
         process.on('SIGINT', () => cleanup('SIGINT'));
         process.on('SIGTERM', () => cleanup('SIGTERM'));
 
-        // Handle unexpected errors - be more cautious about exiting
+        // Handle unexpected errors
         process.on('uncaughtException', error => {
             logger.error('Uncaught exception:', error.message);
             logger.error('Stack trace:', error.stack);
             logger.debug('Full error object:', error);
-            // Try to recover instead of immediately exiting
-            if (error && error.message && error.message.includes('EPIPE')) {
-                logger.warn('Pipe error detected, keeping server alive');
-                return;
-            }
-            // Only exit for truly fatal errors
             process.exit(1);
         });
 
@@ -425,26 +399,10 @@ async function runServer() {
             logger.debug('Warning details:', warning);
         });
 
-        // Handle stdin closure only when using stdio transport
-        if (!useHttp) {
-            process.stdin.on('end', () => {
-                logger.info('Stdin closed, shutting down...');
-                // Give a small delay to ensure any final messages are sent
-                setTimeout(() => process.exit(0), 100);
-            });
-
-            process.stdin.on('error', error => {
-                logger.warn('Stdin error:', error);
-                // Don't exit on stdin errors
-            });
-        }
-
         await server.connect(transport);
-        if (httpServer && port !== undefined) {
-            httpServer.listen(port, () => {
-                logger.info(`HTTP transport listening on port ${port}`);
-            });
-        }
+        httpServer.listen(port, () => {
+            logger.info(`HTTP transport listening on port ${port}`);
+        });
         logger.info('MCP server connected and running successfully!');
         logger.info('Ready to receive requests');
         logger.info('Available tools:', READ_WEBSITE_TOOL.name);
@@ -454,21 +412,16 @@ async function runServer() {
         );
         logger.debug('Server details:', {
             name: 'read-website-fast',
-            version: '0.1.0',
+            version: '1.0.0',
             pid: process.pid,
-            transport: useHttp ? 'HTTP' : 'STDIO',
-            port: useHttp ? port : 'N/A',
+            transport: 'HTTP',
+            port: port,
         });
 
         // Log heartbeat every 30 seconds to show server is alive
         setInterval(() => {
             logger.debug('Server heartbeat - still running...');
         }, 30000);
-
-        // Keep the process alive when using stdio transport
-        if (!useHttp) {
-            process.stdin.resume();
-        }
     } catch (error: any) {
         logger.error('Failed to start server:', error.message);
         logger.debug('Startup error details:', error);

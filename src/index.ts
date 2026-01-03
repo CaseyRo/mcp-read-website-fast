@@ -123,7 +123,7 @@ program
 program
     .command('serve')
     .description(
-        'Run as an MCP server (set MCP_TRANSPORT=streamable-http for HTTP transport; use --port or PORT to change the port)'
+        'Run as an MCP server using HTTP transport (use --port or PORT to change the port, default: 3000)'
     )
     .action(async () => {
         // Import and run the serve module

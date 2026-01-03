@@ -7,8 +7,7 @@ services:
         ports:
             - '3000:3000'
         environment:
-            # Transport configuration
-            - MCP_TRANSPORT=streamable-http
+            # Transport configuration (HTTP only)
             - PORT=3000
 
             # Logging configuration
@@ -41,8 +40,7 @@ services:
         ports:
             - '3001:3000'
         environment:
-            # Transport configuration
-            - MCP_TRANSPORT=streamable-http
+            # Transport configuration (HTTP only)
             - PORT=3000
 
             # Enhanced debugging for development

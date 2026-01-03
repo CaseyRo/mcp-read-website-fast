@@ -7,4 +7,4 @@ dist/
 .env.local
 coverage/
 .vscode/
-.idea/# Trigger deployment
+.idea/

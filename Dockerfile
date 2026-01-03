@@ -59,4 +59,4 @@ CMD ["dumb-init", "node", "dist/serve-restart.js"]
 # Labels
 LABEL maintainer="Just Every"
 LABEL description="MCP Read Website Fast Server"
-LABEL version="0.1.20"
+LABEL version="1.0.0"
