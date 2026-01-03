@@ -51,7 +51,7 @@ server.onerror = error => {
 const READ_WEBSITE_TOOL: Tool = {
     name: 'read_website',
     description:
-        'Fast, token-efficient web content extraction - ideal for reading documentation, analyzing content, and gathering information from websites. Converts to clean Markdown while preserving links and structure.',
+        'Fast, token-efficient web content extraction - ideal for reading documentation, analyzing content, and gathering information from websites. Converts to clean Markdown while preserving links and structure. Supports optional output formats: "markdown" (default), "json" (structured data), or "both" (markdown + JSON).',
     inputSchema: {
         type: 'object',
         properties: {
@@ -70,6 +70,14 @@ const READ_WEBSITE_TOOL: Tool = {
                 type: 'string',
                 description:
                     'Path to Netscape cookie file for authenticated pages',
+                optional: true,
+            },
+            output: {
+                type: 'string',
+                description:
+                    'Output format: "markdown" (default, human-readable text), "json" (structured data with metadata), or "both" (returns both formats)',
+                enum: ['markdown', 'json', 'both'],
+                default: 'markdown',
                 optional: true,
             },
         },
@@ -139,11 +147,20 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
             throw new Error('URL parameter is required and must be a string');
         }
 
+        // Validate and get output format
+        const outputFormat = args.output || 'markdown';
+        if (!['markdown', 'json', 'both'].includes(outputFormat)) {
+            throw new Error(
+                `Invalid output format: ${outputFormat}. Must be "markdown", "json", or "both"`
+            );
+        }
+
         logger.info(`Processing read request for URL: ${args.url}`);
         logger.debug('Read parameters:', {
             url: args.url,
             pages: args.pages,
             cookiesFile: args.cookiesFile,
+            output: outputFormat,
         });
 
         logger.debug('Calling fetchMarkdown...');
@@ -166,26 +183,94 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
             logger.markdownPreview(result.markdown, 300);
         }
 
-        // If there's an error but we still have some content, return it with a note
-        if (result.error && result.markdown) {
+        // Prepare JSON output structure
+        const jsonData = {
+            markdown: result.markdown || '',
+            title: result.title,
+            links: result.links || [],
+            url: args.url,
+            error: result.error,
+        };
+
+        // Format response based on output format
+        if (outputFormat === 'json') {
+            // JSON output only
+            if (result.error && !result.markdown) {
+                // Error with no content - return error in JSON
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify(
+                                {
+                                    markdown: '',
+                                    title: undefined,
+                                    links: [],
+                                    url: args.url,
+                                    error: result.error,
+                                },
+                                null,
+                                2
+                            ),
+                        },
+                    ],
+                };
+            }
             return {
                 content: [
                     {
                         type: 'text',
-                        text: `${result.markdown}\n\n---\n*Note: ${result.error}*`,
+                        text: JSON.stringify(jsonData, null, 2),
                     },
                 ],
             };
-        }
+        } else if (outputFormat === 'both') {
+            // Both markdown and JSON
+            const content: any[] = [];
 
-        // If there's an error and no content, throw it
-        if (result.error && !result.markdown) {
-            throw new Error(result.error);
-        }
+            // Add markdown content (with error note if applicable)
+            if (result.error && result.markdown) {
+                content.push({
+                    type: 'text',
+                    text: `${result.markdown}\n\n---\n*Note: ${result.error}*`,
+                });
+            } else if (result.markdown) {
+                content.push({
+                    type: 'text',
+                    text: result.markdown,
+                });
+            }
 
-        return {
-            content: [{ type: 'text', text: result.markdown }],
-        };
+            // Add JSON content
+            content.push({
+                type: 'text',
+                text: JSON.stringify(jsonData, null, 2),
+            });
+
+            return { content };
+        } else {
+            // Default: markdown output (existing behavior)
+            // If there's an error but we still have some content, return it with a note
+            if (result.error && result.markdown) {
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `${result.markdown}\n\n---\n*Note: ${result.error}*`,
+                        },
+                    ],
+                };
+            }
+
+            // If there's an error and no content, throw it
+            if (result.error && !result.markdown) {
+                throw new Error(result.error);
+            }
+
+            return {
+                content: [{ type: 'text', text: result.markdown }],
+            };
+        }
     } catch (error: any) {
         logger.error('Error fetching content:', error.message);
         logger.debug('Error stack:', error.stack);
