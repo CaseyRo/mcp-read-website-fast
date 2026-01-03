@@ -79,7 +79,7 @@ const startServer = () => {
 
     const serverPath = join(__dirname, 'serve.js');
     const child = spawn(process.execPath, [serverPath], {
-        stdio: ['inherit', 'inherit', 'pipe'],
+        stdio: ['ignore', 'inherit', 'pipe'], // Ignore stdin since we're HTTP-only
         env: process.env,
     });
 

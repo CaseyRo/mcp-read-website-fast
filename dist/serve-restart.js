@@ -49,7 +49,7 @@ const startServer = () => {
     log('INFO', 'Starting MCP server...');
     const serverPath = join(__dirname, 'serve.js');
     const child = spawn(process.execPath, [serverPath], {
-        stdio: ['inherit', 'inherit', 'pipe'],
+        stdio: ['ignore', 'inherit', 'pipe'],
         env: process.env,
     });
     let shuttingDown = false;
