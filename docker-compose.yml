@@ -9,6 +9,7 @@ services:
         environment:
             # Transport configuration (HTTP only)
             - PORT=3000
+            - MCP_API_KEY=${MCP_API_KEY:-}
 
             # Logging configuration
             - LOG_LEVEL=${LOG_LEVEL:-info}
