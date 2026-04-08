@@ -2,7 +2,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ReadResourceRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from './utils/logger.js';
 logger.info('🚀 MCP Server starting up...');
@@ -313,7 +313,7 @@ async function runServer() {
         logger.info('Starting MCP server with HTTP transport...');
         logger.debug('Creating StreamableHTTPServerTransport...');
         const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined,
+            sessionIdGenerator: () => randomUUID(),
         });
         logger.debug('Transport created, connecting to server...');
         transport.onerror = error => {

@@ -3,7 +3,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
@@ -421,7 +421,7 @@ async function runServer() {
         logger.debug('Creating StreamableHTTPServerTransport...');
 
         const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined,
+            sessionIdGenerator: () => randomUUID(),
         });
         logger.debug('Transport created, connecting to server...');
 
