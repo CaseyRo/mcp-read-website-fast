@@ -438,8 +438,9 @@ async function runServer() {
         const port = parseInt(process.env.PORT || '3000', 10);
         const apiKey = process.env.MCP_API_KEY || '';
         const httpServer = createServer((req, res) => {
-            // Bearer token auth
-            if (apiKey) {
+            // Bearer token auth — only enforce on POST (MCP JSON-RPC calls)
+            // GET requests are needed for SSE session establishment
+            if (apiKey && req.method === 'POST') {
                 const auth = req.headers.authorization;
                 if (!auth || !auth.startsWith('Bearer ')) {
                     res.writeHead(401, { 'Content-Type': 'text/plain' });
