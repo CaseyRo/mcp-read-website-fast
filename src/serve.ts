@@ -3,6 +3,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
@@ -435,7 +436,25 @@ async function runServer() {
         };
 
         const port = parseInt(process.env.PORT || '3000', 10);
+        const apiKey = process.env.MCP_API_KEY || '';
         const httpServer = createServer((req, res) => {
+            // Bearer token auth
+            if (apiKey) {
+                const auth = req.headers.authorization;
+                if (!auth || !auth.startsWith('Bearer ')) {
+                    res.writeHead(401, { 'Content-Type': 'text/plain' });
+                    res.end('Unauthorized');
+                    return;
+                }
+                const token = auth.slice(7);
+                const expected = Buffer.from(apiKey);
+                const received = Buffer.from(token);
+                if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+                    res.writeHead(401, { 'Content-Type': 'text/plain' });
+                    res.end('Unauthorized');
+                    return;
+                }
+            }
             transport.handleRequest(req, res).catch((err: unknown) => {
                 logger.error('HTTP request error:', err);
             });
