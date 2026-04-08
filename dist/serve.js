@@ -29,7 +29,7 @@ server.onerror = error => {
 };
 const READ_WEBSITE_TOOL = {
     name: 'read_website',
-    description: 'Fast, token-efficient web content extraction - ideal for reading documentation, analyzing content, and gathering information from websites. Converts to clean Markdown while preserving links and structure. Supports optional output formats: "markdown" (default), "json" (structured data), or "both" (markdown + JSON).',
+    description: '[web] Fast, token-efficient web content extraction - ideal for reading documentation, analyzing content, and gathering information from websites. Converts to clean Markdown while preserving links and structure. Supports optional output formats: "markdown" (default), "json" (structured data), or "both" (markdown + JSON).',
     inputSchema: {
         type: 'object',
         properties: {
