@@ -326,7 +326,7 @@ async function runServer() {
         const port = parseInt(process.env.PORT || '3000', 10);
         const apiKey = process.env.MCP_API_KEY || '';
         const httpServer = createServer((req, res) => {
-            if (apiKey) {
+            if (apiKey && req.method === 'POST') {
                 const auth = req.headers.authorization;
                 if (!auth || !auth.startsWith('Bearer ')) {
                     res.writeHead(401, { 'Content-Type': 'text/plain' });
