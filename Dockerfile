@@ -8,13 +8,16 @@ COPY mcp_read_website/ ./mcp_read_website/
 RUN pip install --no-cache-dir . && \
     python -m crawl4ai.install && \
     playwright install --with-deps chromium && \
-    addgroup --system mcp && adduser --system --ingroup mcp mcp && \
-    mkdir -p /data/fastmcp && chown -R mcp:mcp /data
+    addgroup --system mcp && adduser --system --home /home/mcp --ingroup mcp mcp && \
+    mkdir -p /data/fastmcp /home/mcp/.crawl4ai && \
+    chown -R mcp:mcp /data /home/mcp
 
 USER mcp
 
 ENV TRANSPORT=http
 ENV HOST=0.0.0.0
+ENV HOME=/home/mcp
+ENV CRAWL4AI_DB_FOLDER=/data/fastmcp
 
 EXPOSE 8000
 
