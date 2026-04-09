@@ -1,43 +1,24 @@
-# Single-stage build using pre-built dist/ from git
-FROM node:20-alpine
+FROM python:3.12-slim
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
-
-# Set working directory
 WORKDIR /app
 
-# Copy pre-built dist/ and package files from git
-COPY --chown=nodejs:nodejs dist ./dist
-COPY --chown=nodejs:nodejs package*.json ./
+COPY pyproject.toml README.md ./
+COPY mcp_read_website/ ./mcp_read_website/
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN pip install --no-cache-dir . && \
+    python -m crawl4ai.install && \
+    playwright install --with-deps chromium && \
+    addgroup --system mcp && adduser --system --ingroup mcp mcp && \
+    mkdir -p /data/fastmcp && chown -R mcp:mcp /data
 
-# Switch to non-root user
-USER nodejs
+USER mcp
 
-# Expose default port
-EXPOSE 3000
+ENV TRANSPORT=http
+ENV HOST=0.0.0.0
 
-# Set default environment variables for logging
-ENV NODE_ENV=production
-ENV LOG_LEVEL=info
-ENV MCP_DEBUG=0
-ENV MCP_QUIET=false
+EXPOSE 8000
 
-# Health check - simplified to avoid complex health endpoint
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "process.exit(0)" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python3 -c "from urllib.request import urlopen;from urllib.error import HTTPError,URLError;exec('try:\n urlopen(\"http://localhost:8000/mcp\")\nexcept HTTPError:\n pass\nexcept URLError:\n raise')"
 
-# Default command
-CMD ["dumb-init", "node", "dist/serve-restart.js"]
-
-# Labels
-LABEL maintainer="Just Every"
-LABEL description="MCP Read Website Fast Server"
-LABEL version="1.0.0"
+CMD ["mcp-read-website-fast"]

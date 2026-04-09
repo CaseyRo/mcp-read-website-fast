@@ -1,318 +1,208 @@
-# @just-every/mcp-read-website-fast
+# mcp-read-website-fast
 
-Fast, token-efficient web content extraction for AI agents - converts websites to clean Markdown.
+A fast, token-efficient web content extractor that converts web pages to clean Markdown. Built for LLM and RAG pipelines as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server.
 
-[![npm version](https://badge.fury.io/js/@just-every%2Fmcp-read-website-fast.svg)](https://www.npmjs.com/package/@just-every/mcp-read-website-fast)
-[![GitHub Actions](https://github.com/just-every/mcp-read-website-fast/workflows/Release/badge.svg)](https://github.com/just-every/mcp-read-website-fast/actions)
+> **This is a content extraction tool, not a web scraper.** It is designed for reading and understanding web pages — documentation, articles, reference material — not for bulk data harvesting, competitive scraping, or circumventing access controls. Please use responsibly and respect website terms of service.
 
-<a href="https://glama.ai/mcp/servers/@just-every/mcp-read-website-fast">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@just-every/mcp-read-website-fast/badge" alt="read-website-fast MCP server" />
-</a>
+## What It Does
 
-## Overview
+- Fetches web pages and converts them to clean, structured Markdown
+- Handles JavaScript-rendered content (Playwright-based browser)
+- Multi-page crawling via BFS link following (same-origin)
+- Built-in caching for repeated requests
+- Bearer token authentication for secure deployment
+- Runs as an MCP server (stdio or HTTP transport)
 
-Existing MCP web crawlers are slow and consume large quantities of tokens. This pauses the development process and provides incomplete results as LLMs need to parse whole web pages.
+## Quick Start
 
-This MCP package fetches web pages locally, strips noise, and converts content to clean Markdown while preserving links. Designed for HTTP-based MCP clients and LLM pipelines with minimal token footprint. Crawl sites locally with minimal dependencies.
+### Prerequisites
 
-**Note:** This package now uses [@just-every/crawl](https://www.npmjs.com/package/@just-every/crawl) for its core crawling and markdown conversion functionality.
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
-**⚠️ Breaking Change (v1.0.0)**: This server now runs exclusively via HTTP transport. Stdio transport for IDE integration (Cursor, VS Code, Claude Code, JetBrains) is no longer supported. All clients must connect via HTTP.
-
-## Features
-
-- **Fast startup** using official MCP SDK with lazy loading for optimal performance
-- **Content extraction** using Mozilla Readability (same as Firefox Reader View)
-- **HTML to Markdown** conversion with Turndown + GFM support
-- **Smart caching** with SHA-256 hashed URLs
-- **Polite crawling** with robots.txt support and rate limiting
-- **Concurrent fetching** with configurable depth crawling
-- **Stream-first design** for low memory usage
-- **Link preservation** for knowledge graphs
-
-## Installation
-
-### HTTP Transport Only
-
-This MCP server runs exclusively via HTTP streamable transport. It does not support stdio transport for IDE integration.
-
-### Docker Deployment (Recommended)
-
-The easiest way to run the server is using Docker:
+### Install & Run
 
 ```bash
-docker-compose up -d
+# Clone and install
+git clone https://github.com/just-every/mcp-read-website-fast.git
+cd mcp-read-website-fast
+uv sync
+
+# Run (stdio transport — for MCP clients like Claude Desktop)
+uv run mcp-read-website-fast
+
+# Run (HTTP transport — for remote/Docker deployment)
+TRANSPORT=http uv run mcp-read-website-fast
 ```
 
-See the [Docker](#docker) section below for detailed configuration options.
-
-### Manual HTTP Server
-
-Start the server manually:
+### Docker
 
 ```bash
-npm run serve
-# Or with custom port
-PORT=8080 npm run serve
+docker compose up --build
 ```
 
-The server will listen on port 3000 by default (or the port specified by the `PORT` environment variable).
+The server will be available at `http://localhost:8010/mcp`.
 
-### MCP Client Configuration
+## MCP Tools
 
-Configure your HTTP-capable MCP client to connect to the server endpoint. The server exposes the MCP protocol over HTTP at `http://localhost:3000` (or your configured port).
+### `read_website`
 
-## Docker
+Fetch a web page and return clean Markdown.
 
-### Quick Start
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | string | *required* | HTTP/HTTPS URL to fetch |
+| `pages` | int (1-20) | 1 | Number of same-origin pages to crawl via BFS |
+| `output` | enum | `"markdown"` | `"markdown"`, `"json"`, or `"both"` |
+| `timeout_seconds` | int (5-120) | 30 | Per-page timeout. Increase for JS-heavy sites |
+| `max_chars` | int (0-500000) | 50000 | Max characters returned. 0 = unlimited |
 
-```bash
-# Build and run with Docker Compose (recommended)
-docker-compose up -d
+**Examples:**
+```
+# Read a single page
+read_website(url="https://docs.example.com/api")
 
-# Or build and run manually
-docker build -t mcp-read-website-fast .
-docker run -d -p 3000:3000 --name mcp-server mcp-read-website-fast
+# Crawl a docs section (5 pages)
+read_website(url="https://docs.example.com/api", pages=5)
+
+# Get structured data with links for crawl planning
+read_website(url="https://example.com", output="json")
+
+# Increase timeout for slow sites
+read_website(url="https://heavy-js-site.com", timeout_seconds=60)
 ```
 
-**Note**: The Docker build uses pre-built `dist/` files from git for faster builds. Ensure `dist/` is up-to-date before building.
+### `list_links`
 
-### Docker Compose
+Preview all outbound links from a page without fetching full content. Use before `read_website(pages=N)` to pick relevant pages.
 
-The included `docker-compose.yml` provides a production-ready setup:
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | string | *required* | URL to extract links from |
+| `same_origin_only` | bool | `true` | Only return same-domain links |
+| `timeout_seconds` | int (5-120) | 30 | Timeout in seconds |
 
-```bash
-# Start server
-docker-compose up -d
+### `get_cache_status`
 
-# View logs
-docker-compose logs -f
+Returns cache size and file count.
 
-# Stop the server
-docker-compose down
+### `clear_cache`
 
-# Rebuild and restart
-docker-compose up -d --build
+Clears the on-disk cache. Use when stale content is suspected.
+
+## Configuration
+
+All configuration is via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRANSPORT` | `stdio` | `stdio` or `http` |
+| `HOST` | `127.0.0.1` | Bind address (use `0.0.0.0` for Docker) |
+| `PORT` | `8000` | HTTP port |
+| `MCP_API_KEY` | *(none)* | Bearer token for authentication |
+
+## MCP Client Configuration
+
+### Claude Desktop / Claude Code (stdio)
+
+```json
+{
+  "mcpServers": {
+    "read-website-fast": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/mcp-read-website-fast", "run", "mcp-read-website-fast"]
+    }
+  }
+}
 ```
 
-### Environment Variables
+### Remote HTTP (with auth)
 
-The Docker setup supports comprehensive environment variable configuration:
-
-#### Transport Configuration
-- `PORT=3000` - HTTP server port (default: 3000)
-
-#### Logging Configuration
-- `LOG_LEVEL=info` - Logging level (error, warn, info, debug)
-- `MCP_DEBUG=0` - MCP debug mode (0=off, 1=on)
-- `MCP_QUIET=false` - MCP quiet mode (true/false)
-
-#### Server Configuration
-- `NODE_ENV=production` - Node.js environment (production/development)
-- `DEBUG_LEVEL=info` - Debug level override
-- `VERBOSE_LOGGING=false` - Enable verbose logging
-
-#### Development Settings
-- `NODE_OPTIONS=--inspect=0.0.0.0:9229` - Enable Node.js inspector for debugging (can be set via environment variable)
-
-### Custom Port
-
-```bash
-# Run on custom port
-docker run -d -p 8080:8080 \
-  -e PORT=8080 \
-  --name mcp-server \
-  mcp-read-website-fast
-```
-
-### Debugging with Docker
-
-```bash
-# Start with debug logging
-LOG_LEVEL=debug docker-compose up -d
-
-# Start with MCP debugging enabled
-MCP_DEBUG=1 docker-compose up -d
-
-# Start with Node.js inspector enabled
-NODE_OPTIONS=--inspect=0.0.0.0:9229 docker-compose up -d
-
-# View debug logs
-docker-compose logs -f
-
-# Connect to Node.js inspector (if enabled)
-# Open http://localhost:9229 in Chrome DevTools
-```
-
-### HTTP Transport
-
-The server runs exclusively via HTTP streamable transport. It automatically starts an HTTP server on the configured port.
-
-```bash
-# Start server (default port 3000)
-npm run serve
-
-# Start with custom port
-PORT=8080 npm run serve
-
-# Or using the restart wrapper directly
-node dist/serve-restart.js
-PORT=8080 node dist/serve-restart.js
-```
-
-The server listens on port `3000` by default. Override it with the `PORT` environment variable.
-
-**Note:** This server only supports HTTP transport. Stdio transport for IDE integration is not supported.
-
-## Features
-
-- **Fast startup** using official MCP SDK with lazy loading for optimal performance
-- **Content extraction** using Mozilla Readability (same as Firefox Reader View)
-- **HTML to Markdown** conversion with Turndown + GFM support
-- **Smart caching** with SHA-256 hashed URLs
-- **Polite crawling** with robots.txt support and rate limiting
-- **Concurrent fetching** with configurable depth crawling
-- **Stream-first design** for low memory usage
-- **Link preservation** for knowledge graphs
-
-### Available Tools
-
-- `read_website` - Fetches a webpage and converts it to clean markdown
-  - Parameters:
-    - `url` (required): The HTTP/HTTPS URL to fetch
-    - `pages` (optional): Maximum number of pages to crawl (default: 1, max: 100)
-    - `output` (optional): Output format - `"markdown"` (default), `"json"` (structured data with metadata), or `"both"` (returns both formats)
-      - `"markdown"`: Returns markdown text content (default, backward compatible)
-      - `"json"`: Returns structured JSON with fields: `markdown`, `title`, `links`, `url`, `error`
-      - `"both"`: Returns both markdown and JSON formats in separate content items
-
-### Available Resources
-
-- `read-website-fast://status` - Get cache statistics
-- `read-website-fast://clear-cache` - Clear the cache directory
-
-## Development Usage
-
-### Install
-
-```bash
-npm install
-npm run build
-```
-
-### Single page fetch
-```bash
-npm run dev fetch https://example.com/article
-```
-
-### Crawl with depth
-```bash
-npm run dev fetch https://example.com --depth 2 --concurrency 5
-```
-
-### Output formats
-```bash
-# Markdown only (default)
-npm run dev fetch https://example.com
-
-# JSON output with metadata
-npm run dev fetch https://example.com --output json
-
-# Both URL and markdown
-npm run dev fetch https://example.com --output both
-```
-
-### CLI Options
-
-- `-p, --pages <number>` - Maximum number of pages to crawl (default: 1)
-- `-c, --concurrency <number>` - Max concurrent requests (default: 3)
-- `--no-robots` - Ignore robots.txt
-- `--all-origins` - Allow cross-origin crawling
-- `-u, --user-agent <string>` - Custom user agent
-- `--cache-dir <path>` - Cache directory (default: .cache)
-- `-t, --timeout <ms>` - Request timeout in milliseconds (default: 30000)
-- `-o, --output <format>` - Output format: json, markdown, or both (default: markdown)
-
-### Clear cache
-```bash
-npm run dev clear-cache
-```
-
-## Auto-Restart Feature
-
-The MCP server includes automatic restart capability by default for improved reliability:
-
-- Automatically restarts the server if it crashes
-- Handles unhandled exceptions and promise rejections
-- Implements exponential backoff (max 10 attempts in 1 minute)
-- Logs all restart attempts for monitoring
-- Gracefully handles shutdown signals (SIGINT, SIGTERM)
-
-For development/debugging without auto-restart:
-```bash
-# Run directly without restart wrapper
-npm run serve:dev
-```
-
-## Architecture
-
-```
-mcp-read-website-fast/
-├── src/
-│   ├── internal/
-│   │   └── fetchMarkdown.ts  # Core API using @just-every/crawl
-│   ├── utils/
-│   │   ├── logger.ts         # Logging utilities
-│   │   └── extractMarkdownLinks.ts  # Link extraction utilities
-│   ├── index.ts              # CLI entry point
-│   ├── serve.ts              # MCP server entry point
-│   └── serve-restart.ts      # Auto-restart wrapper
+```json
+{
+  "mcpServers": {
+    "read-website-fast": {
+      "url": "https://your-server.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
 ```
 
 ## Development
 
 ```bash
-# Run in development mode
-npm run dev fetch https://example.com
+# Install with dev dependencies
+uv sync
 
-# Build for production
-npm run build
+# Run tests (unit + server tests only, no network)
+uv run pytest -m "not live"
 
-# Run tests
-npm test
+# Run all tests including live integration tests
+uv run pytest -v
 
-# Type checking
-npm run typecheck
+# Lint
+uv run ruff check .
 
-# Linting
-npm run lint
+# Format
+uv run ruff format .
 ```
 
-## Contributing
+### Test Structure
 
-Contributions are welcome! Please:
+| File | What it tests | Network? |
+|------|---------------|----------|
+| `tests/test_crawler.py` | Link extraction, same-origin filtering | No |
+| `tests/test_server.py` | Tool registration, params, schema | No |
+| `tests/test_live.py` | Real sites: The Verge, Medium, GitHub, edge cases | Yes |
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+### Project Structure
 
-## Troubleshooting
+```
+mcp_read_website/
+  server.py        # FastMCP app — tools, entry point
+  crawler.py       # Crawl4AI wrapper — crawling + link extraction
+  config.py        # Pydantic Settings
+  auth.py          # Bearer token auth
+tests/
+  test_crawler.py  # Unit tests
+  test_server.py   # Server registration tests
+  test_live.py     # Live integration tests
+```
 
-### Cache Issues
+## Deployment
+
+### Docker Compose
+
 ```bash
-npm run dev clear-cache
+# Set API key
+echo "MCP_API_KEY=your-secret-key" > .env
+
+# Build and run
+docker compose up --build -d
 ```
 
-### Timeout Errors
-- Increase timeout with `-t` flag
-- Check network connectivity
-- Verify URL is accessible
+### Komodo (CDIT infrastructure)
 
-### Content Not Extracted
-- Some sites block automated access
-- Try custom user agent with `-u` flag
-- Check if site requires JavaScript (not supported)
+The `komodo.toml` is pre-configured for deployment to the CDIT server fleet. Push to `main` to trigger auto-deployment.
+
+## Responsible Use
+
+This tool is intended for:
+- Reading documentation and reference material
+- Analyzing publicly available web content
+- Gathering information for research and summarization
+- Powering RAG pipelines with web-sourced context
+
+This tool is **not** intended for:
+- Bulk scraping or data harvesting
+- Circumventing paywalls or access controls
+- Competitive intelligence scraping
+- Any use that violates website terms of service
+
+The tool respects `robots.txt` when configured to do so. Please be mindful of rate limits and server load when using multi-page crawling.
 
 ## License
 

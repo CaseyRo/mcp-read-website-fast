@@ -4,100 +4,78 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A fast, token-efficient web content extractor that converts web pages to clean Markdown. Designed for LLM/RAG pipelines, it provides both CLI and MCP server interfaces with smart caching, polite crawling, and minimal dependencies.
+A fast, token-efficient web content extractor that converts web pages to clean Markdown. Designed for LLM/RAG pipelines, it provides an MCP server interface using Crawl4AI (Playwright-based) for content extraction including JavaScript-rendered pages.
+
+**This is NOT a scraping tool.** It is designed for content extraction and understanding — reading docs, articles, and reference material for AI agents.
 
 ## Core Modules & Files
 
-- `src/internal/fetchMarkdown.ts`: Core API shared by CLI and MCP (uses @just-every/crawl)
-- `src/index.ts`: CLI interface using Commander
-- `src/serve.ts`: MCP server using @modelcontextprotocol/sdk
-- `src/serve-restart.ts`: Auto-restart wrapper for MCP server
-- `src/utils/`: Logger and link extraction utilities
+- `mcp_read_website/server.py`: FastMCP server — 4 tools (read_website, list_links, get_cache_status, clear_cache), entry point
+- `mcp_read_website/crawler.py`: Crawl4AI wrapper — single-page, multi-page BFS, link discovery
+- `mcp_read_website/config.py`: Pydantic Settings (transport, host, port, cache_dir, mcp_api_key)
+- `mcp_read_website/auth.py`: Bearer token auth (MCP_API_KEY via SecretStr)
 
 ## Commands
 
 ### Development
 ```bash
-npm run dev fetch <URL>              # Fetch single page in dev mode
-npm run dev fetch <URL> --pages 3    # Crawl up to 3 pages
-npm run dev clear-cache              # Clear the cache
-npm run serve:dev                    # Run MCP server in dev mode
-```
-
-### Build & Production
-```bash
-npm run build                        # Compile TypeScript to JavaScript
-npm run start                        # Run compiled CLI
-npm run serve                        # Run compiled MCP server
+uv run mcp-read-website-fast                        # Run MCP server (stdio)
+TRANSPORT=http uv run mcp-read-website-fast          # Run MCP server (HTTP on port 8000)
 ```
 
 ### Code Quality
 ```bash
-npm run lint                         # Run ESLint
-npm run typecheck                    # TypeScript type checking
-npm test                             # Run tests with Vitest
+uv run pytest                   # Run all tests (unit + live)
+uv run pytest -m "not live"     # Run unit tests only (no network)
+uv run ruff check .             # Lint
+uv run ruff format .            # Format
 ```
 
-## Architecture
-
-This is a TypeScript-based web content extractor that converts web pages to clean Markdown, designed for LLM/RAG pipelines. It provides both CLI and MCP server interfaces.
-
-### Core Components
-
-1. **Web Content Extraction** (via `@just-every/crawl`):
-   - Uses Mozilla Readability for content extraction (Firefox Reader View engine)
-   - HTML to Markdown conversion with Turndown + GFM support
-   - Respects robots.txt and supports rate limiting
-   - SHA-256 based caching with configurable cache directory
-   - Configurable concurrency and timeout limits
-
-2. **Entry Points**:
-   - `src/index.ts`: CLI interface using Commander
-   - `src/serve.ts`: MCP server using @modelcontextprotocol/sdk
-   - `src/serve-restart.ts`: Auto-restart wrapper for production
-   - `src/internal/fetchMarkdown.ts`: Core API used by both interfaces
-
-### Key Patterns
-
-- Stream-first design for memory efficiency
-- Lazy loading in MCP server for fast startup
-- URL normalization for consistent caching (handled by @just-every/crawl)
-- Configurable concurrency and timeout limits
-- Automatic relative to absolute URL conversion
+### Docker
+```bash
+docker compose up --build    # Build and run container
+```
 
 ## Pre-Commit Requirements
 
 **IMPORTANT**: Always run these commands before committing:
 
 ```bash
-npm test          # Ensure tests pass
-npm run lint      # Check linting
-npm run build     # Ensure TypeScript compiles
+uv run pytest -m "not live"    # Ensure unit tests pass
+uv run ruff check .            # Check linting
 ```
 
 Only commit if all commands succeed without errors.
 
-## TypeScript Configuration
+## Architecture
 
-- ES Modules with Node.js >=20.0.0
-- Strict mode enabled, targeting ES2022
-- Source maps enabled for debugging
-- Declaration files generated for consumers
+Python 3.12 FastMCP server using Crawl4AI for web content extraction.
 
-## Code Style Guidelines
+### Tools
 
-- Use async/await over promises
-- Implement proper error handling with try/catch
-- Follow functional programming patterns where appropriate
-- Keep functions small and focused
-- Use descriptive variable names
+| Tool | Purpose |
+|------|---------|
+| `read_website` | Fetch URL(s), return clean Markdown. Supports multi-page BFS. |
+| `list_links` | Lightweight link discovery — returns title + links without full content |
+| `get_cache_status` | Report cache size and file count |
+| `clear_cache` | Clear on-disk cache |
+
+### Key Design Decisions
+
+- **Cache**: Uses Crawl4AI's built-in cache (`CacheMode.ENABLED`), stored at `~/.cache/mcp-read-website-fast`
+- **Truncation**: `max_chars=50000` default prevents context window overflow
+- **Pages cap**: Max 20 pages per crawl to prevent abuse
+- **Timeout**: Exposed as `timeout_seconds` (user-friendly) converted to ms internally
+- **Auth**: `MCP_API_KEY` loaded via Pydantic `SecretStr` in Settings
 
 ## Testing Instructions
 
-- Run tests with `npm test`
-- Add tests for new features in `test/` directory
-- Mock external dependencies (network, filesystem)
-- Test both success and error cases
+- Run tests with `uv run pytest`
+- `tests/test_crawler.py`: Pure function tests (no network)
+- `tests/test_server.py`: Tool registration and schema tests (no network)
+- `tests/test_live.py`: Integration tests against real sites (The Verge, Medium, GitHub)
+- Mark live tests: `@pytest.mark.live`
+- Skip live tests: `uv run pytest -m "not live"`
 
 ## Repository Etiquette
 
@@ -109,59 +87,14 @@ Only commit if all commands succeed without errors.
 ## Developer Environment Setup
 
 1. Clone repository
-2. Install Node.js 20.x or higher
-3. Run `npm install`
-4. Copy `.env.example` to `.env` (if needed)
-5. Run `npm run dev` for development
-
-## Package Management
-
-- Use exact versions in package.json
-- Run `npm audit` before adding new dependencies
-- Keep dependencies minimal for fast installs
-- Document why each dependency is needed
+2. Install Python 3.12+ and uv
+3. Run `uv sync`
+4. Run `uv run mcp-read-website-fast` for development
 
 ## Project-Specific Warnings
 
-- **Cache Size**: Monitor cache directory size in production
-- **Rate Limiting**: Respect robots.txt and implement delays
+- **Docker Image Size**: Crawl4AI + Playwright + Chromium = ~500MB+ image
 - **Memory Usage**: Large pages can consume significant memory
 - **URL Validation**: Always validate and sanitize URLs
-- **Concurrent Requests**: Default limit is 3, adjust carefully
-
-## Key Utility Functions & APIs
-
-- `fetchMarkdown()`: Core extraction function in `src/internal/fetchMarkdown.ts`
-- `extractMarkdownLinks()`: Extracts and filters links from markdown content
-- `logger`: Custom logger with colored output (writes to stderr for MCP compatibility)
-
-## MCP Server Integration
-
-When running as MCP server (`npm run serve`):
-
-**Transport:**
-- HTTP streamable transport only (stdio transport not supported)
-- Server listens on port 3000 by default (configurable via `PORT` environment variable)
-
-**Tools:**
-- `read_website` - Main content extraction tool
-
-**Resources:**
-- `read-website-fast://status` - Cache statistics
-- `read-website-fast://clear-cache` - Clear cache
-
-## Troubleshooting
-
-### Common Issues
-
-- **Timeout errors**: Increase timeout with `--timeout` flag
-- **Memory issues**: Process pages individually, not in bulk
-- **Cache misses**: Check URL normalization
-- **Extraction failures**: Some sites block automated access
-
-### Debug Mode
-
-Enable debug logging:
-```bash
-DEBUG=read-website-fast:* npm run dev fetch <URL>
-```
+- **First Request Latency**: Browser startup adds latency on first crawl
+- **Not a scraper**: Do not add bulk scraping features or bypass access controls
