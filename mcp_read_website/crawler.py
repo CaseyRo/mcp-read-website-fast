@@ -10,8 +10,10 @@ import socket
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, urljoin
 
+import html2text
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from readability import Document
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,12 @@ INTER_REQUEST_DELAY = 0.5  # 500ms between requests to same domain
 
 # Concurrency: max 3 simultaneous browser instances across all requests
 crawl_semaphore = asyncio.Semaphore(3)
+
+# HTML to markdown converter (shared instance)
+_h2t = html2text.HTML2Text()
+_h2t.ignore_links = False
+_h2t.ignore_images = True
+_h2t.body_width = 0
 
 # Shared browser config — TLS validation enforced, debugging port disabled
 _browser_config = BrowserConfig(
@@ -144,7 +152,28 @@ def _extract_links_from_result(result, current_url: str) -> list[str]:
 
 
 def _get_markdown_text(result) -> str:
-    """Extract raw markdown text from a crawl4ai result, with per-page size limit."""
+    """Extract clean article content using Mozilla Readability, with fallback.
+
+    Uses Readability to strip nav, sidebars, footers, and boilerplate from
+    the raw HTML, then converts the clean HTML to markdown via html2text.
+    Falls back to crawl4ai's raw markdown if Readability produces nothing.
+    """
+    # Try Readability extraction from raw HTML first
+    raw_html = result.html or ""
+    if raw_html:
+        try:
+            doc = Document(raw_html)
+            clean_html = doc.summary()
+            if clean_html:
+                text = _h2t.handle(clean_html).strip()
+                if len(text) > 50:  # Readability produced meaningful content
+                    if len(text) > MAX_PAGE_CHARS:
+                        text = text[:MAX_PAGE_CHARS] + "\n\n<!-- Page content truncated at 512KB -->"
+                    return text
+        except Exception:
+            logger.debug("Readability extraction failed, falling back to raw markdown")
+
+    # Fallback: use crawl4ai's raw markdown
     md = result.markdown
     if hasattr(md, "raw_markdown"):
         text = md.raw_markdown or ""
@@ -154,6 +183,20 @@ def _get_markdown_text(result) -> str:
     if len(text) > MAX_PAGE_CHARS:
         text = text[:MAX_PAGE_CHARS] + "\n\n<!-- Page content truncated at 512KB -->"
     return text
+
+
+def _get_title(result) -> str | None:
+    """Extract page title, preferring Readability's cleaned title."""
+    raw_html = result.html or ""
+    if raw_html:
+        try:
+            doc = Document(raw_html)
+            title = doc.short_title()
+            if title:
+                return title
+        except Exception:
+            pass
+    return result.metadata.get("title") if result.metadata else None
 
 
 async def list_page_links(
@@ -185,7 +228,7 @@ async def list_page_links(
                         "error": "Failed to load page. The site may be down or blocking automated access.",
                     }
 
-                title = result.metadata.get("title") if result.metadata else None
+                title = _get_title(result)
                 links = _extract_links_from_result(result, url)
 
                 if same_origin_only:
@@ -244,7 +287,7 @@ async def _do_crawl(
                     page = {
                         "url": current_url,
                         "markdown": md_text,
-                        "title": result.metadata.get("title") if result.metadata else None,
+                        "title": _get_title(result),
                         "links": links,
                         "error": None,
                     }

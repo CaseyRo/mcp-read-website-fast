@@ -35,7 +35,8 @@ class TestSimpleSites:
     async def test_httpbin_html(self):
         result = await crawl_website("https://httpbin.org/html")
         _assert_valid_result(result, min_length=100)
-        assert "Herman Melville" in result.markdown or "Moby" in result.markdown
+        # httpbin's HTML page contains a Moby Dick passage
+        assert "blacksmith" in result.markdown.lower() or "Moby" in result.markdown or "Herman Melville" in result.markdown
 
 
 class TestDifficultSites:
