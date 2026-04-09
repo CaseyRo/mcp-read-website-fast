@@ -1,9 +1,14 @@
-node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+.ruff_cache/
 .cache/
 *.log
 .DS_Store
 .env
 .env.local
-coverage/
 .vscode/
 .idea/
+dist/
