@@ -56,6 +56,29 @@ class CrawlResult:
     error: str | None = None
 
 
+_PAYWALL_PATTERNS = re.compile(
+    r"subscribe|sign[\s-]?in|log[\s-]?in|create.*account|paywall|premium\s+content"
+    r"|you.ve reached|reading limit|free articles|member(?:ship)?[\s-](?:required|only)"
+    r"|continue reading.*(?:subscribe|sign[\s-]?in)",
+    re.IGNORECASE,
+)
+
+
+def _diagnose_failure(url: str, result=None) -> str:
+    """Return a specific error message when a page fails to load."""
+    html = ""
+    if result is not None:
+        html = result.html or ""
+
+    if html and _PAYWALL_PATTERNS.search(html):
+        return (
+            "This page appears to require a subscription or login. "
+            "The site returned a paywall or sign-in prompt instead of article content."
+        )
+
+    return "Failed to load page. The site may be down or blocking automated access."
+
+
 def validate_url(url: str) -> str:
     """Validate and normalize a URL. Raises ValueError for unsafe URLs."""
     # Auto-add scheme if missing
@@ -229,7 +252,7 @@ async def list_page_links(
                         "url": url,
                         "title": None,
                         "links": [],
-                        "error": "Failed to load page. The site may be down or blocking automated access.",
+                        "error": _diagnose_failure(url, result),
                     }
 
                 title = _get_title(result)
@@ -310,7 +333,7 @@ async def _do_crawl(
                         "markdown": "",
                         "title": None,
                         "links": [],
-                        "error": "Failed to load page. The site may be down or blocking automated access.",
+                        "error": _diagnose_failure(current_url, result),
                     })
 
             except Exception as exc:
