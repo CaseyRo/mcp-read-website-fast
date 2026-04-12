@@ -38,7 +38,11 @@ _browser_config = BrowserConfig(
     headless=True,
     verbose=False,
     ignore_https_errors=False,
-    extra_args=["--remote-debugging-port=0"],
+    extra_args=[
+        "--remote-debugging-port=0",
+        "--no-sandbox",              # Required for non-root Docker containers
+        "--disable-dev-shm-usage",   # Prevent /dev/shm OOM in constrained containers
+    ],
 )
 
 
@@ -240,9 +244,9 @@ async def list_page_links(
                     "link_count": len(links),
                     "links": links,
                 }
-    except Exception:
+    except Exception as exc:
         logger.exception("Error in list_page_links for %s", url)
-        return {"url": url, "title": None, "links": [], "error": "Failed to load page. Check server logs for details."}
+        return {"url": url, "title": None, "links": [], "error": f"Failed to load page: {exc}"}
 
 
 async def _do_crawl(
@@ -309,14 +313,14 @@ async def _do_crawl(
                         "error": "Failed to load page. The site may be down or blocking automated access.",
                     })
 
-            except Exception:
+            except Exception as exc:
                 logger.exception("Error crawling %s", current_url)
                 all_results.append({
                     "url": current_url,
                     "markdown": "",
                     "title": None,
                     "links": [],
-                    "error": "Failed to fetch page. Check server logs for details.",
+                    "error": f"Failed to fetch page: {exc}",
                 })
 
     if not all_results:
@@ -402,9 +406,9 @@ async def crawl_website(
         )
     except ValueError:
         raise  # Re-raise URL validation errors
-    except Exception:
+    except Exception as exc:
         logger.exception("crawl_error url=%s", url)
-        return CrawlResult(markdown="", error="Crawl failed. Check server logs for details.")
+        return CrawlResult(markdown="", error=f"Crawl failed: {exc}")
 
     logger.info("crawl_complete url=%s pages=%d error=%s", url, len(result.links) > 0, result.error)
     return result
