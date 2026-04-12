@@ -7,10 +7,18 @@ COPY mcp_read_website/ ./mcp_read_website/
 
 RUN pip install --no-cache-dir . && \
     python -m crawl4ai.install && \
-    playwright install --with-deps chromium && \
     addgroup --system mcp && adduser --system --home /home/mcp --ingroup mcp mcp && \
     mkdir -p /data/fastmcp /home/mcp/.crawl4ai && \
     chown -R mcp:mcp /data /home/mcp
+
+# Install Playwright browsers AS the mcp user so binaries land in /home/mcp/.cache/ms-playwright/
+USER mcp
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/mcp/.cache/ms-playwright
+RUN playwright install chromium
+
+# Switch back to root to install system deps, then back to mcp
+USER root
+RUN playwright install-deps chromium
 
 USER mcp
 
