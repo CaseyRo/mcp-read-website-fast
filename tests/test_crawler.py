@@ -3,6 +3,7 @@
 import pytest
 
 from mcp_read_website.crawler import (
+    _diagnose_failure,
     extract_markdown_links,
     filter_same_origin_links,
     validate_url,
@@ -104,3 +105,43 @@ class TestFilterSameOriginLinks:
     def test_empty_links(self):
         result = filter_same_origin_links([], "https://example.com")
         assert result == []
+
+
+class TestDiagnoseFailure:
+    """Tests for paywall/login wall detection."""
+
+    def _fake_result(self, html: str):
+        class R:
+            pass
+        r = R()
+        r.html = html
+        return r
+
+    def test_detects_subscribe_prompt(self):
+        result = self._fake_result('<div class="paywall">Subscribe to continue reading</div>')
+        msg = _diagnose_failure("https://example.com", result)
+        assert "subscription or login" in msg
+
+    def test_detects_sign_in_prompt(self):
+        result = self._fake_result("<p>Please sign in to access this article</p>")
+        msg = _diagnose_failure("https://example.com", result)
+        assert "subscription or login" in msg
+
+    def test_detects_membership_required(self):
+        result = self._fake_result("<span>membership required to view</span>")
+        msg = _diagnose_failure("https://example.com", result)
+        assert "subscription or login" in msg
+
+    def test_generic_when_no_paywall_signals(self):
+        result = self._fake_result("<html><body>Server error</body></html>")
+        msg = _diagnose_failure("https://example.com", result)
+        assert "may be down or blocking" in msg
+
+    def test_generic_when_no_result(self):
+        msg = _diagnose_failure("https://example.com")
+        assert "may be down or blocking" in msg
+
+    def test_generic_when_empty_html(self):
+        result = self._fake_result("")
+        msg = _diagnose_failure("https://example.com", result)
+        assert "may be down or blocking" in msg
