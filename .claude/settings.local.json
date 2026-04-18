@@ -12,7 +12,8 @@
       "Bash(npm link:*)",
       "Bash(npm ls:*)",
       "Bash(mcp-read-website-fast serve:*)",
-      "mcp__read-website-fast__read_website_fast"
+      "mcp__read-website-fast__read_website_fast",
+      "Bash(uv run:*)"
     ],
     "deny": []
   }
