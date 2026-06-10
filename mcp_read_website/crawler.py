@@ -8,6 +8,7 @@ import logging
 import re
 import socket
 from dataclasses import dataclass, field
+from typing import Awaitable, Callable
 from urllib.parse import urlparse, urljoin
 
 import html2text
@@ -46,6 +47,11 @@ _browser_config = BrowserConfig(
 )
 
 
+# Optional async callback invoked after each page is fetched during a crawl.
+# Signature: (fetched: int, total: int, current_url: str) -> Awaitable[None]
+ProgressCallback = Callable[[int, int, str], Awaitable[None]]
+
+
 @dataclass
 class CrawlResult:
     """Result of a website crawl."""
@@ -54,6 +60,9 @@ class CrawlResult:
     title: str | None = None
     links: list[str] = field(default_factory=list)
     error: str | None = None
+    pages_requested: int = 1
+    pages_fetched: int = 0
+    pages_failed: int = 0
 
 
 _PAYWALL_PATTERNS = re.compile(
@@ -278,6 +287,7 @@ async def _do_crawl(
     max_pages: int = 1,
     timeout: int = 30000,
     max_chars: int = 0,
+    progress: ProgressCallback | None = None,
 ) -> CrawlResult:
     """Internal crawl implementation with BFS link following."""
     visited: set[str] = set()
@@ -346,8 +356,16 @@ async def _do_crawl(
                     "error": f"Failed to fetch page: {exc}",
                 })
 
+            if progress is not None:
+                try:
+                    await progress(len(all_results), max_pages, current_url)
+                except Exception:
+                    logger.debug("progress callback failed", exc_info=True)
+
     if not all_results:
-        return CrawlResult(markdown="", error="No results returned")
+        return CrawlResult(
+            markdown="", error="No results returned", pages_requested=max_pages
+        )
 
     # Collect errors
     error_pages = [p for p in all_results if p.get("error")]
@@ -397,6 +415,9 @@ async def _do_crawl(
         title=all_results[0].get("title"),
         links=[link for page in all_results for link in page.get("links", [])],
         error=error_msg,
+        pages_requested=max_pages,
+        pages_fetched=len(success_pages),
+        pages_failed=len(error_pages),
     )
 
 
@@ -406,11 +427,16 @@ async def crawl_website(
     max_pages: int = 1,
     timeout: int = 30000,
     max_chars: int = 0,
+    progress: ProgressCallback | None = None,
 ) -> CrawlResult:
     """Crawl a website and return clean markdown.
 
     Uses iterative BFS to follow same-origin links up to max_pages.
     Enforces URL validation, concurrency limits, and overall timeout.
+
+    An optional ``progress`` async callback is invoked after each page with
+    ``(fetched, total, current_url)`` so callers (e.g. an MCP Context) can
+    surface progress on long multi-page crawls.
     """
     url = validate_url(url)
     logger.info("crawl_start url=%s max_pages=%d timeout=%d", url, max_pages, timeout)
@@ -418,7 +444,13 @@ async def crawl_website(
     try:
         async with crawl_semaphore:
             result = await asyncio.wait_for(
-                _do_crawl(url, max_pages=max_pages, timeout=timeout, max_chars=max_chars),
+                _do_crawl(
+                    url,
+                    max_pages=max_pages,
+                    timeout=timeout,
+                    max_chars=max_chars,
+                    progress=progress,
+                ),
                 timeout=MAX_CRAWL_SECONDS,
             )
     except asyncio.TimeoutError:
@@ -426,12 +458,15 @@ async def crawl_website(
         return CrawlResult(
             markdown="",
             error=f"Crawl timed out after {MAX_CRAWL_SECONDS}s. Try fewer pages or a shorter timeout.",
+            pages_requested=max_pages,
         )
     except ValueError:
         raise  # Re-raise URL validation errors
     except Exception as exc:
         logger.exception("crawl_error url=%s", url)
-        return CrawlResult(markdown="", error=f"Crawl failed: {exc}")
+        return CrawlResult(
+            markdown="", error=f"Crawl failed: {exc}", pages_requested=max_pages
+        )
 
     logger.info("crawl_complete url=%s pages=%d error=%s", url, len(result.links) > 0, result.error)
     return result
