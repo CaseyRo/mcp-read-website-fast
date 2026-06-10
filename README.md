@@ -57,6 +57,8 @@ Fetch a web page and return clean Markdown.
 | `timeout_seconds` | int (5-120) | 30 | Per-page timeout. Increase for JS-heavy sites |
 | `max_chars` | int (0-500000) | 50000 | Max characters returned. 0 = unlimited |
 
+Returns a structured result (`url`, `markdown`, `title`, `links`, `error`, plus crawl page counts `pages_requested` / `pages_fetched` / `pages_failed`) so clients get a machine-readable `output_schema` instead of re-parsing a JSON string. Multi-page crawls report progress via the MCP context as each page is fetched.
+
 **Examples:**
 ```
 # Read a single page
@@ -89,6 +91,27 @@ Returns cache size and file count.
 ### `clear_cache`
 
 Clears the on-disk cache. Use when stale content is suspected.
+
+> Tools are tagged `read` (the two content tools) and `cache-admin` (`get_cache_status`, `clear_cache`) so deployments can gate or hide the destructive cache tool via FastMCP `include_tags` / `exclude_tags`.
+
+## MCP Resources
+
+Readable reference data (no side effects), under the `readwebsite://` URI scheme:
+
+| Resource | Description |
+|----------|-------------|
+| `readwebsite://config` | Effective runtime config and the hard limits the crawler enforces |
+| `readwebsite://cache/status` | Current cache size and file count |
+| `readwebsite://usage` | Guidance on choosing tools and tuning crawl parameters |
+
+## MCP Prompts
+
+Guided multi-step workflows:
+
+| Prompt | Purpose |
+|--------|---------|
+| `read_docs_section` | Preview links with `list_links`, then crawl the relevant docs section |
+| `summarize_page` | Read a single URL and produce a concise, structured summary |
 
 ## Configuration
 
