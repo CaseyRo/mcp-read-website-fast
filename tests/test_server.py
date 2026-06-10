@@ -2,6 +2,8 @@
 
 import pytest
 
+import mcp_read_website.server as server_module
+from mcp_read_website.crawler import CrawlResult
 from mcp_read_website.server import mcp
 
 
@@ -91,3 +93,56 @@ class TestServerRegistration:
     async def test_server_has_instructions(self):
         assert mcp.instructions
         assert "read_website" in mcp.instructions
+
+
+class TestBackwardCompat:
+    """Guard the wire-compatible behavior that existing clients depend on."""
+
+    @pytest.mark.asyncio
+    async def test_cache_status_emits_camelcase_keys(self):
+        """get_cache_status must emit the original camelCase wire keys."""
+        tools = await mcp.list_tools()
+        tool = next(t for t in tools if t.name == "get_cache_status")
+
+        # Output schema must advertise the original camelCase keys.
+        mcp_tool = tool.to_mcp_tool()
+        schema_props = (mcp_tool.outputSchema or {}).get("properties", {})
+        for key in ("cacheSize", "cacheFiles", "cacheSizeFormatted"):
+            assert key in schema_props, f"missing camelCase key {key} in output schema"
+
+        # Actual structured data must also use the camelCase keys.
+        result = await tool.run({})
+        structured = result.structured_content
+        for key in ("cacheSize", "cacheFiles", "cacheSizeFormatted"):
+            assert key in structured, f"missing camelCase key {key} in structured output"
+        # snake_case variants must NOT leak onto the wire (back-compat).
+        for key in ("cache_size", "cache_files", "cache_size_formatted"):
+            assert key not in structured, f"snake_case key {key} leaked onto the wire"
+        # New additive key is allowed.
+        assert "cache_dir" in structured
+
+    @pytest.mark.asyncio
+    async def test_read_website_json_includes_markdown(self, monkeypatch):
+        """output='json' must include the markdown content, matching main."""
+
+        async def fake_crawl(url, **kwargs):
+            return CrawlResult(
+                markdown="# Hello\n\nbody text",
+                title="Hello",
+                links=["https://example.com/a"],
+                error=None,
+                pages_requested=1,
+                pages_fetched=1,
+                pages_failed=0,
+            )
+
+        monkeypatch.setattr(server_module, "crawl_website", fake_crawl)
+
+        tools = await mcp.list_tools()
+        tool = next(t for t in tools if t.name == "read_website")
+
+        result = await tool.run({"url": "https://example.com", "output": "json"})
+        structured = result.structured_content
+        assert structured["markdown"] == "# Hello\n\nbody text"
+        assert structured["title"] == "Hello"
+        assert structured["links"] == ["https://example.com/a"]

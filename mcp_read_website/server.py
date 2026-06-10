@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Annotated
 
 from fastmcp import Context, FastMCP
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from mcp_read_website.auth import BearerTokenVerifier
 from mcp_read_website.config import settings
@@ -111,13 +111,31 @@ class LinksResult(BaseModel):
 
 
 class CacheStatus(BaseModel):
-    """On-disk fetch cache statistics."""
+    """On-disk fetch cache statistics.
+
+    The wire (JSON) keys for size/files/formatted-size use the original
+    camelCase names (cacheSize, cacheFiles, cacheSizeFormatted) for
+    backward compatibility with existing clients. The model can still be
+    constructed using the snake_case field names (populate_by_name=True).
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     cache_dir: str = Field(description="Filesystem path of the cache directory")
-    cache_size: int = Field(default=0, description="Total cache size in bytes")
-    cache_files: int = Field(default=0, description="Number of files in the cache")
+    cache_size: int = Field(
+        default=0,
+        serialization_alias="cacheSize",
+        description="Total cache size in bytes",
+    )
+    cache_files: int = Field(
+        default=0,
+        serialization_alias="cacheFiles",
+        description="Number of files in the cache",
+    )
     cache_size_formatted: str = Field(
-        default="0.00 MB", description="Human-readable cache size"
+        default="0.00 MB",
+        serialization_alias="cacheSizeFormatted",
+        description="Human-readable cache size",
     )
     error: str | None = Field(default=None, description="Error message; null on success")
 
@@ -170,8 +188,9 @@ async def read_website(
     Tip: call list_links first to preview available pages before a multi-page crawl.
 
     Returns a structured ReadResult (url, markdown, title, links, error, and
-    crawl page counts). The 'output' argument controls whether 'markdown' is
-    populated: 'json' omits it, 'markdown'/'both' include it.
+    crawl page counts). The 'markdown' field is populated for all output
+    modes ('markdown', 'json', and 'both'), matching the original behavior
+    where output='json' included the page content.
     """
     progress = None
     if ctx is not None:
@@ -201,8 +220,6 @@ async def read_website(
                 f"{len(result.links)} link(s) found"
             )
 
-    include_markdown = output in (OutputFormat.markdown, OutputFormat.both)
-
     # Raise only on a hard failure with no usable content in markdown mode,
     # preserving the original behavior.
     if (
@@ -212,9 +229,12 @@ async def read_website(
     ):
         raise ValueError(f"Failed to fetch content: {result.error}")
 
+    # All output modes ('markdown', 'json', 'both') include the markdown
+    # content. On 'main', output='json' returned a payload that contained
+    # the page content, so this preserves backward compatibility.
     return ReadResult(
         url=url,
-        markdown=result.markdown if include_markdown else "",
+        markdown=result.markdown or "",
         title=result.title,
         links=result.links or [],
         error=result.error,
