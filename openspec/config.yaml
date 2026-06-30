@@ -1,0 +1,39 @@
+schema: spec-driven
+
+references:
+  - mcp-fleet
+
+context: |
+  mcp-read-website-fast is a Python 3.12 FastMCP server that converts web pages
+  into clean, token-efficient Markdown for LLM/RAG pipelines. It is a content
+  extraction tool, NOT a scraper — never add bulk-harvesting features or anything
+  that bypasses paywalls or access controls.
+
+  Stack:
+  - fastmcp (>=3.4.2,<4.0.0) for the MCP server (tools, resources, prompts).
+  - crawl4ai (Playwright/Chromium) for fetching and rendering JS-heavy pages.
+  - readability-lxml (Mozilla Readability) to strip nav/boilerplate, then
+    html2text to convert clean HTML to Markdown.
+  - pydantic / pydantic-settings for models and env-driven config.
+  - hatchling build backend; uv for dependency + venv management.
+
+  Layout:
+  - mcp_read_website/server.py — FastMCP app: tools (read_website, list_links,
+    get_cache_status, clear_cache), resources (readwebsite://config|cache/status|
+    usage), prompts (read_docs_section, summarize_page), /health route, main().
+  - mcp_read_website/crawler.py — Crawl4AI wrapper: single-page + multi-page BFS,
+    link discovery, SSRF guards, and safety limits (512 KB/page, 2 MB total,
+    max 20 pages, 120 s crawl timeout, 3 concurrent browsers).
+  - mcp_read_website/config.py — Pydantic Settings (TRANSPORT, HOST, PORT,
+    MCP_API_KEY, cache_dir).
+  - mcp_read_website/auth.py — timing-safe bearer-token verifier.
+
+  Transport & auth:
+  - stdio (default) for local MCP clients; http (streamable, stateless) for
+    Docker/remote. HTTP mode fails fast if MCP_API_KEY is unset.
+
+  Conventions:
+  - Conventional commits (feat:, fix:, chore:). Branches: feature/*, fix/*.
+  - Pre-commit: `uv run pytest -m "not live"` and `uv run ruff check .` must pass.
+  - Add tests for new behavior; update README.md for user-facing changes.
+  - Deployed via Komodo (compose.yaml) to the CDIT fleet on push to main.

@@ -24,7 +24,7 @@ A fast, token-efficient web content extractor that converts web pages to clean M
 
 ```bash
 # Clone and install
-git clone https://github.com/just-every/mcp-read-website-fast.git
+git clone https://github.com/CaseyRo/mcp-read-website-fast.git
 cd mcp-read-website-fast
 uv sync
 
