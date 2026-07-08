@@ -1,7 +1,7 @@
 schema: spec-driven
 
 references:
-  - mcp-fleet
+  - cdit
 
 context: |
   mcp-read-website-fast is a Python 3.12 FastMCP server that converts web pages
