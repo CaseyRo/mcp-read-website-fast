@@ -2,10 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY mcp_read_website/ ./mcp_read_website/
 
-RUN pip install --no-cache-dir . && \
+RUN pip install --no-cache-dir uv && \
+    uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && \
+    pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && \
+    pip install --no-cache-dir --no-deps . && \
+    rm /tmp/requirements.txt && \
     python -m crawl4ai.install && \
     addgroup --system mcp && adduser --system --home /home/mcp --ingroup mcp mcp && \
     mkdir -p /data/fastmcp /home/mcp/.crawl4ai && \
