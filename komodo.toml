@@ -1,8 +1,8 @@
 [[stack]]
-name = "git-mcp-read-website-fast"
+name = "git-mcp-read-website-fast-nebula"
 description = "MCP server for fast web content extraction to markdown"
 deploy = true
-tags = ["mcp"]
+tags = ["cdit"]
 
 [stack.config]
 server_id = "nebula-1"
@@ -10,6 +10,11 @@ git_provider = "github.com"
 repo = "CaseyRo/mcp-read-website-fast"
 branch = "main"
 compose_file_path = "compose.yaml"
+# Push to main IS the deploy trigger: GitHub push webhook -> Komodo listener,
+# which auto-pulls and rebuilds from source. No GHCR image is involved.
+webhook_enabled = true
+auto_pull = true
+run_build = true
 environment = """
 MCP_API_KEY = [[MCP_API_KEY]]
 """
