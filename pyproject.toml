@@ -1,6 +1,6 @@
 [project]
 name = "mcp-read-website-fast"
-version = "2.0.1"
+version = "2.0.2"
 description = "Fast, token-efficient web content extractor — converts pages to clean Markdown for LLM/RAG pipelines"
 readme = "README.md"
 license = "MIT"
