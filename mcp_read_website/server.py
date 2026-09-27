@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from mcp_read_website.auth import BearerTokenVerifier
 from mcp_read_website.config import settings
 from mcp_read_website.crawler import crawl_website, list_page_links
+from mcp_read_website.usage import UsageMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ elif settings.transport == "http":
     )
 
 mcp = FastMCP("read-website-fast", instructions=SERVER_INSTRUCTIONS, auth=_auth)
+mcp.add_middleware(UsageMiddleware("read-website-fast"))
 
 
 class OutputFormat(str, Enum):
