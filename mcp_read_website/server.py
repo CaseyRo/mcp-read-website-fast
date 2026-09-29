@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
-import shutil
+import os
+import subprocess
 from enum import Enum
+from pathlib import Path
 from typing import Annotated
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
+from crawl4ai.async_database import async_db_manager
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -281,15 +284,26 @@ async def list_links(
     )
 
 
+def _cache_paths() -> tuple[Path, Path, list[Path]]:
+    """Crawl4AI's page cache: (cache dir, sqlite db, content dirs).
+
+    Read from Crawl4AI's own db manager, which resolves
+    ``$CRAWL4_AI_BASE_DIRECTORY/.crawl4ai`` (default ``~/.crawl4ai``), so the
+    cache tools always point where CacheMode.ENABLED actually writes.
+    """
+    db = Path(async_db_manager.db_path)
+    content = sorted({Path(d) for d in async_db_manager.content_paths.values()})
+    return db.parent, db, content
+
+
 def _read_cache_status() -> CacheStatus:
     """Compute cache statistics (shared by tool + resource)."""
-    cache_dir = settings.cache_dir
+    cache_dir, db, content_dirs = _cache_paths()
     try:
-        if not cache_dir.exists():
-            return CacheStatus(cache_dir=str(cache_dir))
-
-        files = list(cache_dir.iterdir())
-        total_size = sum(f.stat().st_size for f in files if f.is_file())
+        files = [f for d in content_dirs if d.exists() for f in d.rglob("*") if f.is_file()]
+        total_size = sum(f.stat().st_size for f in files)
+        if db.exists():
+            total_size += db.stat().st_size
         return CacheStatus(
             cache_dir=str(cache_dir),
             cache_size=total_size,
@@ -333,10 +347,15 @@ async def get_cache_status() -> CacheStatus:
 )
 async def clear_cache() -> CacheClearResult:
     """Clears the on-disk cache. Use when stale content is suspected or cache is too large."""
+    # Empty the rows via Crawl4AI (the sqlite file stays open in its pool) and
+    # the stored page bodies; the content dirs stay, Crawl4AI writes into them.
+    await async_db_manager.aclear_db()
+    _, _, content_dirs = _cache_paths()
     try:
-        shutil.rmtree(settings.cache_dir)
-    except FileNotFoundError:
-        pass
+        for d in content_dirs:
+            for f in d.rglob("*"):
+                if f.is_file():
+                    f.unlink(missing_ok=True)
     except OSError as e:
         raise ToolError(f"Failed to clear cache: {e}") from e
     return CacheClearResult(status="success", message="Cache cleared successfully")
@@ -374,7 +393,7 @@ def config_resource() -> dict:
         "service": "read-website-fast",
         "version": _version,
         "transport": settings.transport,
-        "cache_dir": str(settings.cache_dir),
+        "cache_dir": str(_cache_paths()[0]),
         "auth_required": settings.mcp_api_key is not None,
         "limits": {
             "max_pages": 20,
@@ -463,10 +482,36 @@ from starlette.responses import JSONResponse as _SResp  # noqa: E402
 
 _start_time = datetime.now(_tz.utc)
 
-try:
-    from mcp_read_website import __version__ as _version
-except ImportError:
-    _version = "0.1.0"
+from mcp_read_website import __version__ as _version  # noqa: E402
+
+
+def _resolve_git_commit() -> str:
+    """Get git commit from env var, baked file, or git command."""
+    from_env = os.getenv("GIT_COMMIT", "")
+    if from_env and from_env != "unknown":
+        return from_env
+    # Check for baked-in file (Docker image)
+    try:
+        with open("/app/.git_commit") as f:
+            val = f.read().strip()
+            if val and val != "unknown":
+                return val
+    except FileNotFoundError:
+        pass
+    # Fallback: git command (local dev)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+_git_commit = _resolve_git_commit()
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -475,6 +520,7 @@ async def _health(request: _SReq) -> _SResp:
         "status": "healthy",
         "service": "read-website-fast",
         "version": _version,
+        "git_commit": _git_commit,
         "upstream_reachable": True,
         "uptime_seconds": int((datetime.now(_tz.utc) - _start_time).total_seconds()),
     })

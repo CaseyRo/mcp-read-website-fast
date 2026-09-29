@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr
@@ -17,9 +16,6 @@ class Settings(BaseSettings):
 
     # Authentication
     mcp_api_key: SecretStr | None = None
-
-    # Cache
-    cache_dir: Path = Path.home() / ".cache" / "mcp-read-website-fast"
 
     model_config = {"env_prefix": "", "case_sensitive": False}
 

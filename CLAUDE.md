@@ -12,7 +12,7 @@ A fast, token-efficient web content extractor that converts web pages to clean M
 
 - `mcp_read_website/server.py`: FastMCP server — 4 tools (read_website, list_links, get_cache_status, clear_cache), entry point
 - `mcp_read_website/crawler.py`: Crawl4AI wrapper — single-page, multi-page BFS, link discovery
-- `mcp_read_website/config.py`: Pydantic Settings (transport, host, port, cache_dir, mcp_api_key)
+- `mcp_read_website/config.py`: Pydantic Settings (transport, host, port, mcp_api_key)
 - `mcp_read_website/auth.py`: Bearer token auth (MCP_API_KEY via SecretStr)
 - `mcp_read_website/usage.py`: Usage telemetry middleware, vendored from `CDiT-infrastructure/scripts/mcp_usage_middleware.py` (do not edit here)
 
@@ -70,7 +70,7 @@ FastMCP 4 conventions in this repo:
 
 ### Key Design Decisions
 
-- **Cache**: Uses Crawl4AI's built-in cache (`CacheMode.ENABLED`), stored at `~/.cache/mcp-read-website-fast`
+- **Cache**: Uses Crawl4AI's built-in cache (`CacheMode.ENABLED`), stored at `$CRAWL4_AI_BASE_DIRECTORY/.crawl4ai` (default `~/.crawl4ai`); the cache tools read that path from Crawl4AI's `async_db_manager`
 - **Truncation**: `max_chars=50000` default prevents context window overflow
 - **Pages cap**: Max 20 pages per crawl to prevent abuse
 - **Timeout**: Exposed as `timeout_seconds` (user-friendly) converted to ms internally

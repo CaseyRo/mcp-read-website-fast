@@ -1,5 +1,7 @@
 """Tests for the MCP server tool and resource registration."""
 
+import os
+
 import pytest
 
 import mcp_read_website.server as server_module
@@ -146,3 +148,66 @@ class TestBackwardCompat:
         assert structured["markdown"] == "# Hello\n\nbody text"
         assert structured["title"] == "Hello"
         assert structured["links"] == ["https://example.com/a"]
+
+
+class TestHealth:
+    @pytest.mark.asyncio
+    async def test_health_reports_package_version_and_commit(self):
+        """/health reports the real version (not a stale literal) and git_commit."""
+        from importlib.metadata import version
+
+        import httpx
+
+        app = mcp.http_app()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+        ) as client:
+            resp = await client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "healthy"
+        assert body["version"] == server_module._version
+        assert body["version"] == (os.environ.get("APP_VERSION") or version("mcp-read-website-fast"))
+        assert body["version"] != "0.2.0"
+        assert body["git_commit"] == server_module._git_commit
+
+
+class TestCachePath:
+    def test_cache_tools_follow_crawl4ai_db_path(self):
+        """Cache tools must report the dir Crawl4AI actually caches pages in."""
+        from pathlib import Path
+
+        from crawl4ai.async_database import DB_PATH, async_db_manager
+
+        cache_dir, db, content_dirs = server_module._cache_paths()
+        assert db == Path(DB_PATH) == Path(async_db_manager.db_path)
+        assert cache_dir == Path(DB_PATH).parent
+        assert set(content_dirs) == {Path(d) for d in async_db_manager.content_paths.values()}
+        assert server_module._read_cache_status().cache_dir == str(cache_dir)
+
+    @pytest.mark.asyncio
+    async def test_status_and_clear_use_crawl4ai_paths(self, monkeypatch, tmp_path):
+        """Status counts Crawl4AI's stored pages; clear empties db rows and page files."""
+        from crawl4ai.async_database import async_db_manager
+
+        content = tmp_path / "markdown_content"
+        content.mkdir()
+        (content / "abc").write_text("x" * 100)
+        monkeypatch.setattr(async_db_manager, "db_path", str(tmp_path / "crawl4ai.db"))
+        monkeypatch.setattr(async_db_manager, "content_paths", {"markdown": str(content)})
+        cleared = []
+
+        async def fake_clear():
+            cleared.append(True)
+
+        monkeypatch.setattr(async_db_manager, "aclear_db", fake_clear)
+
+        status = server_module._read_cache_status()
+        assert status.cache_dir == str(tmp_path)
+        assert status.cache_files == 1
+        assert status.cache_size == 100
+
+        await server_module.clear_cache()
+        assert cleared == [True]
+        assert content.exists() and not any(content.iterdir())
+        assert server_module._read_cache_status().cache_files == 0

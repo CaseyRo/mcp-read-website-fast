@@ -1,6 +1,10 @@
 services:
   mcp-read-website-fast:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        APP_VERSION: ${APP_VERSION:-}
     restart: unless-stopped
     ports:
       - "8010:8000"
@@ -9,6 +13,7 @@ services:
       - HOST=0.0.0.0
       - MCP_API_KEY=${MCP_API_KEY}
       - FASTMCP_HOME=/data/fastmcp
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
     volumes:
       - fastmcp-data:/data/fastmcp
     mem_limit: 2g
