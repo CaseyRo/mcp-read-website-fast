@@ -18,14 +18,14 @@ features or anything that bypasses access controls.
 
 - `mcp_read_website/server.py` — FastMCP app: tools, resources, prompts, `/health`, entry point (`main`).
 - `mcp_read_website/crawler.py` — Crawl4AI wrapper: single-page + multi-page BFS, link discovery, SSRF guards, safety limits.
-- `mcp_read_website/config.py` — Pydantic Settings (`TRANSPORT`, `HOST`, `PORT`, `MCP_API_KEY`, `cache_dir`).
+- `mcp_read_website/config.py` — Pydantic Settings (`TRANSPORT`, `HOST`, `PORT`, `MCP_API_KEY`).
 - `mcp_read_website/auth.py` — Bearer-token verifier (timing-safe compare of `MCP_API_KEY`).
 
 ## Tools / surface
 
 - `read_website` — fetch one URL or BFS-crawl a same-origin section (`pages` 1-20); returns a structured `ReadResult`.
 - `list_links` — preview title + outbound links without pulling full content.
-- `get_cache_status` / `clear_cache` — inspect / reset the on-disk fetch cache (tagged `cache-admin`).
+- `get_cache_status` / `clear_cache`: inspect or reset Crawl4AI's page cache (`$CRAWL4_AI_BASE_DIRECTORY/.crawl4ai`, default `~/.crawl4ai`; tagged `cache-admin`).
 - Resources: `readwebsite://config`, `readwebsite://cache/status`, `readwebsite://usage`.
 - Prompts: `read_docs_section`, `summarize_page`.
 
@@ -52,7 +52,7 @@ features or anything that bypasses access controls.
 ## Docker
 
 - `docker compose up --build` builds the single-stage Python image (Crawl4AI + Playwright/Chromium, ~500 MB+).
-- Runs as a non-root `mcp` user; HTTP transport; cache persisted via the `fastmcp-data` volume.
+- Runs as a non-root `mcp` user; HTTP transport; the Crawl4AI page cache is at `/home/mcp/.crawl4ai` (container-local, not in the `fastmcp-data` volume).
 - First crawl pays browser-startup latency.
 
 ## Maintenance

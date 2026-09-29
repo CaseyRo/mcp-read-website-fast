@@ -10,6 +10,10 @@ RUN apt-get update && \
 COPY pyproject.toml uv.lock README.md ./
 COPY mcp_read_website/ ./mcp_read_website/
 
+# Bake git commit into the image
+ARG GIT_COMMIT=unknown
+RUN echo "${GIT_COMMIT}" > /app/.git_commit
+
 RUN pip install --no-cache-dir uv && \
     uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && \
     pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && \
@@ -31,10 +35,13 @@ RUN playwright install-deps chromium
 
 USER mcp
 
+# Release version (the git tag); /health reports it. Unset → pyproject version.
+ARG APP_VERSION=""
+ENV APP_VERSION=$APP_VERSION
+
 ENV TRANSPORT=http
 ENV HOST=0.0.0.0
 ENV HOME=/home/mcp
-ENV CRAWL4AI_DB_FOLDER=/data/fastmcp
 
 EXPOSE 8000
 

@@ -47,7 +47,7 @@ echo "MCP_API_KEY=change-me" > .env
 docker compose up --build -d
 ```
 
-The Compose file builds the image from source and runs the HTTP transport. The server is available at `http://localhost:8010/mcp`. `GET /health` (and `/healthz`) returns the service status; the container health check uses it. The cache lives in the `fastmcp-data` volume.
+The Compose file builds the image from source and runs the HTTP transport. The server is available at `http://localhost:8010/mcp`. `GET /health` (and `/healthz`) returns the service status, `version` and `git_commit`; the container health check uses it. Pass `GIT_COMMIT` and `APP_VERSION` as build args so `/health` reports the running build. The Crawl4AI page cache lives in the container at `/home/mcp/.crawl4ai` and does not survive a container recreate.
 
 ## MCP client configuration
 
@@ -89,7 +89,9 @@ All configuration comes from environment variables.
 | `HOST` | `127.0.0.1` | Bind address for HTTP. The Docker image sets `0.0.0.0`. |
 | `PORT` | `8000` | HTTP port. |
 | `MCP_API_KEY` | *(unset)* | Bearer token clients must send. Required when `TRANSPORT=http`. |
-| `CACHE_DIR` | `~/.cache/mcp-read-website-fast` | Cache directory reported by `get_cache_status` and emptied by `clear_cache`. |
+| `CRAWL4_AI_BASE_DIRECTORY` | `$HOME` | Crawl4AI's base directory. Its page cache (`.crawl4ai/crawl4ai.db` plus stored page bodies) is what `get_cache_status` reports and `clear_cache` empties. |
+| `GIT_COMMIT` | `unknown` | Commit reported by `/health` (also a build arg). |
+| `APP_VERSION` | package version | Release version reported by `/health` (build arg). |
 
 ## Authentication
 
