@@ -1,49 +1,103 @@
 # mcp-read-website-fast
 
-A fast, token-efficient web content extractor that converts web pages to clean Markdown. Built for LLM and RAG pipelines as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server.
+A fast, token-efficient web content extractor that converts web pages to clean Markdown. Built for LLM and RAG pipelines as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, it is for anyone who wants an AI assistant to read documentation, articles and reference pages, including JavaScript-rendered ones, without pulling raw HTML into the context window.
 
-> **This is a content extraction tool, not a web scraper.** It is designed for reading and understanding web pages — documentation, articles, reference material — not for bulk data harvesting, competitive scraping, or circumventing access controls. Please use responsibly and respect website terms of service.
+This repository is a fork of [just-every/mcp-read-website-fast](https://github.com/just-every/mcp-read-website-fast) (MIT). The original is a TypeScript/Node server; this fork is a Python rewrite on [FastMCP](https://github.com/PrefectHQ/fastmcp) and [Crawl4AI](https://github.com/unclecode/crawl4ai). Credit for the idea and the original implementation goes to the upstream authors.
 
-## What It Does
+> **This is a content extraction tool, not a web scraper.** It is designed for reading and understanding web pages (documentation, articles, reference material), not for bulk data harvesting, competitive scraping, or circumventing access controls. Please use it responsibly and respect website terms of service.
+
+## What it does
 
 - Fetches web pages and converts them to clean, structured Markdown
-- Handles JavaScript-rendered content (Playwright-based browser)
-- Multi-page crawling via BFS link following (same-origin)
-- Built-in caching for repeated requests
-- Bearer token authentication for secure deployment
-- Runs as an MCP server (stdio or HTTP transport)
+- Handles JavaScript-rendered content (Crawl4AI with a headless Chromium browser)
+- Crawls several pages of one site breadth-first (same origin only)
+- Caches fetched pages on disk for repeated requests
+- Blocks private, loopback and link-local addresses (SSRF protection)
+- Runs as an MCP server over stdio or streamable HTTP, with bearer token authentication in HTTP mode
 
-## Quick Start
+## Requirements
 
-### Prerequisites
+- Python 3.12 or newer
+- [uv](https://docs.astral.sh/uv/)
+- A Chromium build for Playwright (installed with one command below)
+- Docker with Compose, if you want to run it as a container (the image is about 500 MB because it bundles Chromium)
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+## Install and run
 
-### Install & Run
+### Local
 
 ```bash
-# Clone and install
 git clone https://github.com/CaseyRo/mcp-read-website-fast.git
 cd mcp-read-website-fast
 uv sync
+uv run playwright install chromium
 
-# Run (stdio transport — for MCP clients like Claude Desktop)
+# stdio transport, for local MCP clients like Claude Desktop or Claude Code
 uv run mcp-read-website-fast
 
-# Run (HTTP transport — for remote/Docker deployment)
-TRANSPORT=http uv run mcp-read-website-fast
+# HTTP transport, for remote clients (requires MCP_API_KEY)
+TRANSPORT=http MCP_API_KEY=change-me uv run mcp-read-website-fast
+# listens on http://127.0.0.1:8000/mcp
 ```
 
 ### Docker
 
 ```bash
-docker compose up --build
+echo "MCP_API_KEY=change-me" > .env
+docker compose up --build -d
 ```
 
-The server will be available at `http://localhost:8010/mcp`.
+The Compose file builds the image from source and runs the HTTP transport. The server is available at `http://localhost:8010/mcp`. `GET /health` (and `/healthz`) returns the service status; the container health check uses it. The cache lives in the `fastmcp-data` volume.
 
-## MCP Tools
+## MCP client configuration
+
+### stdio
+
+```json
+{
+  "mcpServers": {
+    "read-website-fast": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/mcp-read-website-fast", "run", "mcp-read-website-fast"]
+    }
+  }
+}
+```
+
+### Remote HTTP
+
+```json
+{
+  "mcpServers": {
+    "read-website-fast": {
+      "url": "https://your-server.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
+```
+
+## Configuration
+
+All configuration comes from environment variables.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRANSPORT` | `stdio` | `stdio` or `http` (streamable HTTP, stateless). The Docker image sets `http`. |
+| `HOST` | `127.0.0.1` | Bind address for HTTP. The Docker image sets `0.0.0.0`. |
+| `PORT` | `8000` | HTTP port. |
+| `MCP_API_KEY` | *(unset)* | Bearer token clients must send. Required when `TRANSPORT=http`. |
+| `CACHE_DIR` | `~/.cache/mcp-read-website-fast` | Cache directory reported by `get_cache_status` and emptied by `clear_cache`. |
+
+## Authentication
+
+In HTTP mode every request must carry `Authorization: Bearer <MCP_API_KEY>`. The token is compared in constant time. If `MCP_API_KEY` is unset in HTTP mode, the server exits at startup instead of running unauthenticated. There is no OAuth. In stdio mode the client launches the server as a local process and no token is used.
+
+For a public deployment, put the server behind a reverse proxy or MCP gateway that terminates TLS.
+
+## MCP tools
 
 ### `read_website`
 
@@ -51,13 +105,13 @@ Fetch a web page and return clean Markdown.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `url` | string | *required* | HTTP/HTTPS URL to fetch |
-| `pages` | int (1-20) | 1 | Number of same-origin pages to crawl via BFS |
+| `url` | string | *required* | HTTP or HTTPS URL to fetch |
+| `pages` | int (1-20) | 1 | Number of same-origin pages to crawl breadth-first |
 | `output` | enum | `"markdown"` | `"markdown"`, `"json"`, or `"both"` |
 | `timeout_seconds` | int (5-120) | 30 | Per-page timeout. Increase for JS-heavy sites |
-| `max_chars` | int (0-500000) | 50000 | Max characters returned. 0 = unlimited |
+| `max_chars` | int (0-500000) | 50000 | Max characters returned. 0 means unlimited |
 
-Returns a structured result (`url`, `markdown`, `title`, `links`, `error`, plus crawl page counts `pages_requested` / `pages_fetched` / `pages_failed`) so clients get a machine-readable `output_schema` instead of re-parsing a JSON string. Multi-page crawls report progress via the MCP context as each page is fetched.
+Returns a structured result (`url`, `markdown`, `title`, `links`, `error`, plus the crawl counts `pages_requested`, `pages_fetched` and `pages_failed`), so clients get a machine-readable output schema. Multi-page crawls report progress as each page is fetched. If a page cannot be fetched at all in markdown mode, the call fails with a tool error; partial problems are reported in the `error` field.
 
 **Examples:**
 ```
@@ -76,12 +130,12 @@ read_website(url="https://heavy-js-site.com", timeout_seconds=60)
 
 ### `list_links`
 
-Preview all outbound links from a page without fetching full content. Use before `read_website(pages=N)` to pick relevant pages.
+Preview the outbound links of a page without fetching full content. Use it before `read_website(pages=N)` to pick relevant pages.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `url` | string | *required* | URL to extract links from |
-| `same_origin_only` | bool | `true` | Only return same-domain links |
+| `same_origin_only` | bool | `true` | Only return same-origin links |
 | `timeout_seconds` | int (5-120) | 30 | Timeout in seconds |
 
 ### `get_cache_status`
@@ -90,11 +144,11 @@ Returns cache size and file count.
 
 ### `clear_cache`
 
-Clears the on-disk cache. Use when stale content is suspected.
+Clears the on-disk cache. Use it when stale content is suspected.
 
-> Tools are tagged `read` (the two content tools) and `cache-admin` (`get_cache_status`, `clear_cache`) so deployments can gate or hide the destructive cache tool via FastMCP `include_tags` / `exclude_tags`.
+Tools are tagged `read` (the two content tools) and `cache-admin` (`get_cache_status`, `clear_cache`), so a deployment can hide the destructive cache tool with FastMCP `include_tags` / `exclude_tags`.
 
-## MCP Resources
+## MCP resources
 
 Readable reference data (no side effects), under the `readwebsite://` URI scheme:
 
@@ -104,114 +158,61 @@ Readable reference data (no side effects), under the `readwebsite://` URI scheme
 | `readwebsite://cache/status` | Current cache size and file count |
 | `readwebsite://usage` | Guidance on choosing tools and tuning crawl parameters |
 
-## MCP Prompts
-
-Guided multi-step workflows:
+## MCP prompts
 
 | Prompt | Purpose |
 |--------|---------|
 | `read_docs_section` | Preview links with `list_links`, then crawl the relevant docs section |
 | `summarize_page` | Read a single URL and produce a concise, structured summary |
 
-## Configuration
+## Limits
 
-All configuration is via environment variables:
+Hard limits in `crawler.py`: 512 KB per page, 2 MB per crawl, 20 pages per crawl, 120 seconds overall timeout, at most 3 concurrent browser sessions, and a 500 ms delay between requests. The crawler does not check `robots.txt`, so keep multi-page crawls small and mind the load you put on other people's servers.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TRANSPORT` | `stdio` | `stdio` or `http` |
-| `HOST` | `127.0.0.1` | Bind address (use `0.0.0.0` for Docker) |
-| `PORT` | `8000` | HTTP port |
-| `MCP_API_KEY` | *(none)* | Bearer token for authentication |
+## Usage telemetry
 
-## MCP Client Configuration
-
-### Claude Desktop / Claude Code (stdio)
-
-```json
-{
-  "mcpServers": {
-    "read-website-fast": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/mcp-read-website-fast", "run", "mcp-read-website-fast"]
-    }
-  }
-}
-```
-
-### Remote HTTP (with auth)
-
-```json
-{
-  "mcpServers": {
-    "read-website-fast": {
-      "url": "https://your-server.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer your-api-key"
-      }
-    }
-  }
-}
-```
+A small middleware (`mcp_read_website/usage.py`) writes one JSON line per tool call to stderr with the server name, tool name, duration and outcome. It never logs arguments or results, and it sends nothing anywhere; the lines stay in your process logs.
 
 ## Development
 
 ```bash
-# Install with dev dependencies
 uv sync
 
-# Run tests (unit + server tests only, no network)
+# Offline tests (no network)
 uv run pytest -m "not live"
 
-# Run all tests including live integration tests
+# All tests, including live requests to real sites
 uv run pytest -v
 
-# Lint
+# Lint and format
 uv run ruff check .
-
-# Format
 uv run ruff format .
 ```
 
-### Test Structure
-
 | File | What it tests | Network? |
 |------|---------------|----------|
-| `tests/test_crawler.py` | Link extraction, same-origin filtering | No |
-| `tests/test_server.py` | Tool registration, params, schema | No |
-| `tests/test_live.py` | Real sites: The Verge, Medium, GitHub, edge cases | Yes |
+| `tests/test_crawler.py` | Link extraction, same-origin filtering, URL validation | No |
+| `tests/test_server.py` | Tool registration, parameters, schemas | No |
+| `tests/test_live.py` | Real sites and edge cases | Yes |
 
-### Project Structure
+Project layout:
 
 ```
 mcp_read_website/
-  server.py        # FastMCP app — tools, entry point
-  crawler.py       # Crawl4AI wrapper — crawling + link extraction
-  config.py        # Pydantic Settings
-  auth.py          # Bearer token auth
-tests/
-  test_crawler.py  # Unit tests
-  test_server.py   # Server registration tests
-  test_live.py     # Live integration tests
+  server.py        # FastMCP app: tools, resources, prompts, /health, entry point
+  crawler.py       # Crawl4AI wrapper: crawling, link extraction, safety limits
+  config.py        # Pydantic settings
+  auth.py          # Bearer token verifier
+  usage.py         # Usage telemetry middleware
 ```
 
-## Deployment
+There is no pull-request CI workflow in this repository yet. Run the offline tests before opening a pull request. `.github/workflows/security.yml` runs `pip-audit` weekly and when dependencies change.
 
-### Docker Compose
+## Releases
 
-```bash
-# Set API key
-echo "MCP_API_KEY=your-secret-key" > .env
+Every push to `main` that changes more than Markdown or tests runs `.github/workflows/release.yml`: it runs the offline tests and `pip-audit`, bumps the patch version in `pyproject.toml`, adds a `CHANGELOG.md` entry, commits that as `chore(release): vX.Y.Z [skip ci]`, and pushes the commit and the `vX.Y.Z` tag. No container image is published; the Compose file builds from source.
 
-# Build and run
-docker compose up --build -d
-```
-
-### Komodo (CDIT infrastructure)
-
-The `komodo.toml` is pre-configured for deployment to the CDIT server fleet. Push to `main` to trigger auto-deployment.
-
-## Responsible Use
+## Responsible use
 
 This tool is intended for:
 - Reading documentation and reference material
@@ -219,14 +220,16 @@ This tool is intended for:
 - Gathering information for research and summarization
 - Powering RAG pipelines with web-sourced context
 
-This tool is **not** intended for:
+This tool is not intended for:
 - Bulk scraping or data harvesting
-- Circumventing paywalls or access controls
+- Circumventing paywalls or access controls (pages behind a paywall or login are detected and reported, not bypassed)
 - Competitive intelligence scraping
 - Any use that violates website terms of service
 
-The tool respects `robots.txt` when configured to do so. Please be mindful of rate limits and server load when using multi-page crawling.
+## Support
+
+If this server saves you time, you can [buy me a coffee](https://buymeacoffee.com/caseyberlin).
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE), which keeps the upstream copyright notice.
