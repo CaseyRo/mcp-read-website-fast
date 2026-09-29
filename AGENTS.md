@@ -5,7 +5,7 @@ For full guidance see [`CLAUDE.md`](./CLAUDE.md); this file is the short version
 
 ## What this is
 
-A Python 3.12 [FastMCP](https://github.com/jlowin/fastmcp) server that turns web
+A Python 3.12 [FastMCP](https://github.com/PrefectHQ/fastmcp) 4 server that turns web
 pages into clean, token-efficient Markdown for LLM/RAG pipelines. Content is
 fetched and rendered with [Crawl4AI](https://github.com/unclecode/crawl4ai)
 (Playwright/Chromium), then stripped to article content with Mozilla Readability

@@ -14,6 +14,7 @@ A fast, token-efficient web content extractor that converts web pages to clean M
 - `mcp_read_website/crawler.py`: Crawl4AI wrapper — single-page, multi-page BFS, link discovery
 - `mcp_read_website/config.py`: Pydantic Settings (transport, host, port, cache_dir, mcp_api_key)
 - `mcp_read_website/auth.py`: Bearer token auth (MCP_API_KEY via SecretStr)
+- `mcp_read_website/usage.py`: Usage telemetry middleware, vendored from `CDiT-infrastructure/scripts/mcp_usage_middleware.py` (do not edit here)
 
 ## Commands
 
@@ -49,7 +50,14 @@ Only commit if all commands succeed without errors.
 
 ## Architecture
 
-Python 3.12 FastMCP server using Crawl4AI for web content extraction.
+Python 3.12 FastMCP 4 (`fastmcp>=4.0.10,<5.0.0`) server using Crawl4AI for web content extraction.
+
+FastMCP 4 conventions in this repo:
+- Tool annotations use `mcp.types.ToolAnnotations` with snake_case fields (`read_only_hint`, ...).
+- Tool failures `raise ToolError(...)`; never return an error dict or status field.
+- No `ctx.info`/`ctx.debug`/`ctx.warning` logging; progress goes through `ctx.report_progress`.
+- HTTP runs with `stateless_http=True` on `run()`; do not pass `allowed_hosts`.
+- `CacheStatus` keeps camelCase wire keys via `alias` + `serialize_by_alias` (fastmcp 4 ignores `serialization_alias`).
 
 ### Tools
 
@@ -73,9 +81,16 @@ Python 3.12 FastMCP server using Crawl4AI for web content extraction.
 - Run tests with `uv run pytest`
 - `tests/test_crawler.py`: Pure function tests (no network)
 - `tests/test_server.py`: Tool registration and schema tests (no network)
+- `tests/test_mcp_protocol.py`: MCP surface through an in-memory client: registration, snake_case annotations, a mocked read, ToolError paths, one telemetry line (no network)
 - `tests/test_live.py`: Integration tests against real sites (The Verge, Medium, GitHub)
 - Mark live tests: `@pytest.mark.live`
 - Skip live tests: `uv run pytest -m "not live"`
+
+## CI and Releases
+
+- `.github/workflows/ci.yml`: one job named `test` (ruff + `pytest -m "not live"`, `FASTMCP_MCP_CAMELCASE_COMPAT=false`) on PRs and pushes to `main`. `main` is protected and requires `test`.
+- `.github/workflows/release.yml`: tag-only. On push to `main` it tests, runs pip-audit, and pushes the next patch tag (latest `v*` + 1). It never commits to `main`; keep the `pyproject.toml` version static.
+- Deploy: the Komodo stack builds from source (`build: .`) on the push webhook. No image is published.
 
 ## Repository Etiquette
 
