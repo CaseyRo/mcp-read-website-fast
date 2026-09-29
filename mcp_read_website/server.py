@@ -8,6 +8,8 @@ from enum import Enum
 from typing import Annotated
 
 from fastmcp import Context, FastMCP
+from fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from mcp_read_website.auth import BearerTokenVerifier
@@ -76,8 +78,7 @@ class ReadResult(BaseModel):
         default="",
         description=(
             "Clean Markdown content. For multi-page crawls, pages are "
-            "concatenated with source markers. Empty when output='json' or on "
-            "a hard failure."
+            "concatenated with source markers."
         ),
     )
     title: str | None = Field(default=None, description="Page title of the entry URL")
@@ -87,7 +88,10 @@ class ReadResult(BaseModel):
     )
     error: str | None = Field(
         default=None,
-        description="Error or warning message; null on full success",
+        description=(
+            "Warning about pages that failed during a partial crawl; null on "
+            "full success. A read with no usable content raises an error instead."
+        ),
     )
     pages_requested: int = Field(
         default=1, description="Number of pages requested for the crawl"
@@ -109,7 +113,6 @@ class LinksResult(BaseModel):
         default_factory=list, description="Outbound links discovered on the page"
     )
     link_count: int = Field(default=0, description="Number of links returned")
-    error: str | None = Field(default=None, description="Error message; null on success")
 
 
 class CacheStatus(BaseModel):
@@ -118,25 +121,27 @@ class CacheStatus(BaseModel):
     The wire (JSON) keys for size/files/formatted-size use the original
     camelCase names (cacheSize, cacheFiles, cacheSizeFormatted) for
     backward compatibility with existing clients. The model can still be
-    constructed using the snake_case field names (populate_by_name=True).
+    constructed using the snake_case field names (validate_by_name=True).
+    fastmcp 4 ignores serialization_alias, so this uses alias +
+    serialize_by_alias to keep the output schema and payload in camelCase.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(validate_by_name=True, serialize_by_alias=True)
 
     cache_dir: str = Field(description="Filesystem path of the cache directory")
     cache_size: int = Field(
         default=0,
-        serialization_alias="cacheSize",
+        alias="cacheSize",
         description="Total cache size in bytes",
     )
     cache_files: int = Field(
         default=0,
-        serialization_alias="cacheFiles",
+        alias="cacheFiles",
         description="Number of files in the cache",
     )
     cache_size_formatted: str = Field(
         default="0.00 MB",
-        serialization_alias="cacheSizeFormatted",
+        alias="cacheSizeFormatted",
         description="Human-readable cache size",
     )
     error: str | None = Field(default=None, description="Error message; null on success")
@@ -145,19 +150,19 @@ class CacheStatus(BaseModel):
 class CacheClearResult(BaseModel):
     """Outcome of clearing the on-disk cache."""
 
-    status: str = Field(description="'success' or 'error'")
+    status: str = Field(description="Always 'success'; a failure raises an error")
     message: str = Field(description="Human-readable outcome message")
 
 
 @mcp.tool(
     tags={"read"},
-    annotations={
-        "title": "Read Website",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="Read Website",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=True,
+    ),
 )
 async def read_website(
     url: Annotated[str, Field(description="HTTP/HTTPS URL to fetch and convert to markdown")],
@@ -196,40 +201,25 @@ async def read_website(
     """
     progress = None
     if ctx is not None:
-        if pages > 1:
-            await ctx.info(f"Crawling up to {pages} same-origin pages from {url}")
-        else:
-            await ctx.info(f"Reading {url}")
 
         async def progress(fetched: int, total: int, current_url: str) -> None:
-            await ctx.report_progress(progress=fetched, total=total)
-            await ctx.debug(f"Fetched {fetched}/{total}: {current_url}")
+            await ctx.report_progress(progress=fetched, total=total, message=current_url)
 
-    result = await crawl_website(
-        url,
-        max_pages=pages,
-        timeout=timeout_seconds * 1000,
-        max_chars=max_chars,
-        progress=progress,
-    )
+    try:
+        result = await crawl_website(
+            url,
+            max_pages=pages,
+            timeout=timeout_seconds * 1000,
+            max_chars=max_chars,
+            progress=progress,
+        )
+    except ValueError as e:  # URL validation (scheme, private/internal host)
+        raise ToolError(str(e)) from e
 
-    if ctx is not None:
-        if result.error:
-            await ctx.warning(result.error)
-        else:
-            await ctx.info(
-                f"Done: {result.pages_fetched} page(s) fetched, "
-                f"{len(result.links)} link(s) found"
-            )
-
-    # Raise only on a hard failure with no usable content in markdown mode,
-    # preserving the original behavior.
-    if (
-        output == OutputFormat.markdown
-        and result.error
-        and not result.markdown
-    ):
-        raise ValueError(f"Failed to fetch content: {result.error}")
+    # Nothing usable came back: that is a failure, not a result. A partial
+    # multi-page crawl keeps its markdown and reports the misses in `error`.
+    if result.error and not result.markdown:
+        raise ToolError(f"Failed to fetch content: {result.error}")
 
     # All output modes ('markdown', 'json', 'both') include the markdown
     # content. On 'main', output='json' returned a payload that contained
@@ -248,13 +238,13 @@ async def read_website(
 
 @mcp.tool(
     tags={"read"},
-    annotations={
-        "title": "List Links",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="List Links",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=True,
+    ),
 )
 async def list_links(
     url: Annotated[str, Field(description="URL to extract links from")],
@@ -272,18 +262,22 @@ async def list_links(
     Use this before read_website(pages=N) to preview what pages are available
     and select relevant ones. Much cheaper than a full crawl for link discovery.
     """
-    result = await list_page_links(
-        url,
-        same_origin_only=same_origin_only,
-        timeout=timeout_seconds * 1000,
-    )
+    try:
+        result = await list_page_links(
+            url,
+            same_origin_only=same_origin_only,
+            timeout=timeout_seconds * 1000,
+        )
+    except ValueError as e:  # URL validation (scheme, private/internal host)
+        raise ToolError(str(e)) from e
+    if result.get("error"):
+        raise ToolError(result["error"])
     links = result.get("links", []) or []
     return LinksResult(
         url=result.get("url", url),
         title=result.get("title"),
         links=links,
         link_count=result.get("link_count", len(links)),
-        error=result.get("error"),
     )
 
 
@@ -311,38 +305,41 @@ def _read_cache_status() -> CacheStatus:
 
 @mcp.tool(
     tags={"cache-admin"},
-    annotations={
-        "title": "Cache Status",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations=ToolAnnotations(
+        title="Cache Status",
+        read_only_hint=True,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
 )
 async def get_cache_status() -> CacheStatus:
     """Returns cache size and file count. Use before deciding whether to re-fetch a URL."""
-    return _read_cache_status()
+    status = _read_cache_status()
+    if status.error:
+        raise ToolError(status.error)
+    return status
 
 
 @mcp.tool(
     tags={"cache-admin"},
-    annotations={
-        "title": "Clear Cache",
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations=ToolAnnotations(
+        title="Clear Cache",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
 )
-async def clear_cache(ctx: Context | None = None) -> CacheClearResult:
+async def clear_cache() -> CacheClearResult:
     """Clears the on-disk cache. Use when stale content is suspected or cache is too large."""
     try:
-        if ctx is not None:
-            await ctx.info(f"Clearing cache at {settings.cache_dir}")
-        shutil.rmtree(settings.cache_dir, ignore_errors=True)
-        return CacheClearResult(status="success", message="Cache cleared successfully")
-    except Exception as e:
-        return CacheClearResult(status="error", message=str(e))
+        shutil.rmtree(settings.cache_dir)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        raise ToolError(f"Failed to clear cache: {e}") from e
+    return CacheClearResult(status="success", message="Cache cleared successfully")
 
 
 # ---------------------------------------------------------------------------
@@ -452,8 +449,8 @@ def summarize_page(
     return (
         f"Read {url} and summarize it.\n\n"
         f"1. Call read_website(url=\"{url}\", pages=1).\n"
-        "2. If the result has an `error` indicating a paywall or login wall, "
-        "say so plainly rather than guessing the content.\n"
+        "2. If the call fails with a paywall or login-wall error, say so "
+        "plainly rather than guessing the content.\n"
         "3. Otherwise produce: a one-line TL;DR, 3-6 key points, and any "
         "notable links from the result's `links`.\n"
         "Keep it concise and faithful to the source."
@@ -495,10 +492,8 @@ def main() -> None:
             transport="streamable-http",
             host=settings.host,
             port=settings.port,
+            # stateless_http: stateful HTTP leaks sessions (fastmcp #5210).
             stateless_http=True,
-            # fastmcp >=3.4.3 rejects non-localhost Host with 421 unless allowed_hosts
-            # set (the edge in front of it is access-gated). Requires fastmcp>=3.4.3.
-            allowed_hosts=["*"],
         )
     else:
         mcp.run()

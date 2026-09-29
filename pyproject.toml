@@ -7,9 +7,9 @@ license = "MIT"
 requires-python = ">=3.12"
 authors = [{ name = "Casey Romkes" }]
 dependencies = [
-    "fastmcp>=3.4.3,<4.0.0",
+    "fastmcp>=4.0.10,<5.0.0",
     "crawl4ai>=0.6.0",
-    "pydantic>=2.10",
+    "pydantic>=2.11",  # serialize_by_alias (CacheStatus camelCase wire keys)
     "pydantic-settings>=2.12.0",
     "readability-lxml>=0.8.4.1",
     "html2text>=2025.4.15",

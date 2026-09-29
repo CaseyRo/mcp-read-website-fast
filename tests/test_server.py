@@ -24,7 +24,7 @@ class TestServerRegistration:
         tools = await mcp.list_tools()
         tool = next(t for t in tools if t.name == "read_website")
         mcp_tool = tool.to_mcp_tool()
-        props = mcp_tool.inputSchema.get("properties", {})
+        props = mcp_tool.input_schema.get("properties", {})
         assert "url" in props
         assert "pages" in props
         assert "output" in props
@@ -36,7 +36,7 @@ class TestServerRegistration:
         tools = await mcp.list_tools()
         tool = next(t for t in tools if t.name == "read_website")
         mcp_tool = tool.to_mcp_tool()
-        required = mcp_tool.inputSchema.get("required", [])
+        required = mcp_tool.input_schema.get("required", [])
         assert "url" in required
 
     @pytest.mark.asyncio
@@ -44,7 +44,7 @@ class TestServerRegistration:
         tools = await mcp.list_tools()
         tool = next(t for t in tools if t.name == "read_website")
         mcp_tool = tool.to_mcp_tool()
-        pages_schema = mcp_tool.inputSchema["properties"]["pages"]
+        pages_schema = mcp_tool.input_schema["properties"]["pages"]
         assert pages_schema.get("maximum") == 20
 
     @pytest.mark.asyncio
@@ -52,7 +52,7 @@ class TestServerRegistration:
         tools = await mcp.list_tools()
         tool = next(t for t in tools if t.name == "list_links")
         mcp_tool = tool.to_mcp_tool()
-        props = mcp_tool.inputSchema.get("properties", {})
+        props = mcp_tool.input_schema.get("properties", {})
         assert "url" in props
         assert "same_origin_only" in props
 
@@ -62,8 +62,8 @@ class TestServerRegistration:
         tools = await mcp.list_tools()
         tool = next(t for t in tools if t.name == "read_website")
         mcp_tool = tool.to_mcp_tool()
-        assert mcp_tool.outputSchema is not None
-        props = mcp_tool.outputSchema.get("properties", {})
+        assert mcp_tool.output_schema is not None
+        props = mcp_tool.output_schema.get("properties", {})
         # Existing top-level fields must remain present.
         for field in ("url", "markdown", "title", "links", "error"):
             assert field in props
@@ -106,7 +106,7 @@ class TestBackwardCompat:
 
         # Output schema must advertise the original camelCase keys.
         mcp_tool = tool.to_mcp_tool()
-        schema_props = (mcp_tool.outputSchema or {}).get("properties", {})
+        schema_props = (mcp_tool.output_schema or {}).get("properties", {})
         for key in ("cacheSize", "cacheFiles", "cacheSizeFormatted"):
             assert key in schema_props, f"missing camelCase key {key} in output schema"
 
