@@ -370,6 +370,15 @@ async def _do_crawl(
     # Collect errors
     error_pages = [p for p in all_results if p.get("error")]
     success_pages = [p for p in all_results if not p.get("error")]
+    if not success_pages:
+        # Nothing usable: return the per-page diagnosis (paywall, blocked, ...)
+        # as the error so the tool can raise it, instead of a warning-only page.
+        return CrawlResult(
+            markdown="",
+            error="; ".join(f"{p['url']}: {p['error']}" for p in error_pages),
+            pages_requested=max_pages,
+            pages_failed=len(error_pages),
+        )
     error_msg = None
     if error_pages:
         urls = ", ".join(p["url"] for p in error_pages)

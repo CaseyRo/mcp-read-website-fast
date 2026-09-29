@@ -2,7 +2,7 @@
 
 A fast, token-efficient web content extractor that converts web pages to clean Markdown. Built for LLM and RAG pipelines as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, it is for anyone who wants an AI assistant to read documentation, articles and reference pages, including JavaScript-rendered ones, without pulling raw HTML into the context window.
 
-This repository is a fork of [just-every/mcp-read-website-fast](https://github.com/just-every/mcp-read-website-fast) (MIT). The original is a TypeScript/Node server; this fork is a Python rewrite on [FastMCP](https://github.com/PrefectHQ/fastmcp) and [Crawl4AI](https://github.com/unclecode/crawl4ai). Credit for the idea and the original implementation goes to the upstream authors.
+This repository is a fork of [just-every/mcp-read-website-fast](https://github.com/just-every/mcp-read-website-fast) (MIT). The original is a TypeScript/Node server; this fork is a Python rewrite on [FastMCP](https://github.com/PrefectHQ/fastmcp) 4 and [Crawl4AI](https://github.com/unclecode/crawl4ai). Credit for the idea and the original implementation goes to the upstream authors.
 
 > **This is a content extraction tool, not a web scraper.** It is designed for reading and understanding web pages (documentation, articles, reference material), not for bulk data harvesting, competitive scraping, or circumventing access controls. Please use it responsibly and respect website terms of service.
 
@@ -111,7 +111,7 @@ Fetch a web page and return clean Markdown.
 | `timeout_seconds` | int (5-120) | 30 | Per-page timeout. Increase for JS-heavy sites |
 | `max_chars` | int (0-500000) | 50000 | Max characters returned. 0 means unlimited |
 
-Returns a structured result (`url`, `markdown`, `title`, `links`, `error`, plus the crawl counts `pages_requested`, `pages_fetched` and `pages_failed`), so clients get a machine-readable output schema. Multi-page crawls report progress as each page is fetched. If a page cannot be fetched at all in markdown mode, the call fails with a tool error; partial problems are reported in the `error` field.
+Returns a structured result (`url`, `markdown`, `title`, `links`, `error`, plus the crawl counts `pages_requested`, `pages_fetched` and `pages_failed`), so clients get a machine-readable output schema. Multi-page crawls report progress as each page is fetched. If nothing can be fetched (in any output mode), the call fails with a tool error that carries the diagnosis, for example a paywall or login wall; when some pages of a multi-page crawl fail, the rest is returned and the misses are reported in the `error` field.
 
 **Examples:**
 ```
@@ -193,6 +193,7 @@ uv run ruff format .
 |------|---------------|----------|
 | `tests/test_crawler.py` | Link extraction, same-origin filtering, URL validation | No |
 | `tests/test_server.py` | Tool registration, parameters, schemas | No |
+| `tests/test_mcp_protocol.py` | The MCP surface through an in-memory client: tools, annotations, one mocked read, tool errors, usage telemetry | No |
 | `tests/test_live.py` | Real sites and edge cases | Yes |
 
 Project layout:
@@ -206,11 +207,11 @@ mcp_read_website/
   usage.py         # Usage telemetry middleware
 ```
 
-There is no pull-request CI workflow in this repository yet. Run the offline tests before opening a pull request. `.github/workflows/security.yml` runs `pip-audit` weekly and when dependencies change.
+`.github/workflows/ci.yml` runs one job, `test`, on every pull request and every push to `main`: `ruff check` and the offline tests, with `FASTMCP_MCP_CAMELCASE_COMPAT=false` so any leftover camelCase MCP field access fails. `main` is protected and requires `test` to pass before a pull request can merge. `.github/workflows/security.yml` runs `pip-audit` weekly and when dependencies change.
 
 ## Releases
 
-Every push to `main` that changes more than Markdown or tests runs `.github/workflows/release.yml`: it runs the offline tests and `pip-audit`, bumps the patch version in `pyproject.toml`, adds a `CHANGELOG.md` entry, commits that as `chore(release): vX.Y.Z [skip ci]`, and pushes the commit and the `vX.Y.Z` tag. No container image is published; the Compose file builds from source.
+Releases are tag-only. Every push to `main` that changes more than Markdown or tests runs `.github/workflows/release.yml`: it runs the offline tests and `pip-audit`, then pushes the next patch tag (latest `v*` tag + 1). Nothing is committed back to `main`: the version in `pyproject.toml` is static, and `CHANGELOG.md` is no longer updated automatically. No container image is published; the Compose file builds from source.
 
 ## Responsible use
 

@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# ca-certificates: fastmcp 4 (httpx2 + truststore) verifies TLS against the OS trust store.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml uv.lock README.md ./
 COPY mcp_read_website/ ./mcp_read_website/
 
