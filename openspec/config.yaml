@@ -36,4 +36,4 @@ context: |
   - Conventional commits (feat:, fix:, chore:). Branches: feature/*, fix/*.
   - Pre-commit: `uv run pytest -m "not live"` and `uv run ruff check .` must pass.
   - Add tests for new behavior; update README.md for user-facing changes.
-  - Deployed via Komodo (compose.yaml) to the CDIT fleet on push to main.
+  - Deployed from compose.yaml on push to main.

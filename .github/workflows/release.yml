@@ -60,12 +60,11 @@ jobs:
           git tag "v${NEW}"
           echo "version=${NEW}" >> "$GITHUB_OUTPUT"
 
-      # Deploy happens off the push below: the Komodo stack
-      # `git-mcp-read-website-fast-nebula` has webhook_enabled + auto_pull +
-      # run_build, and compose.yaml builds from source (`build: .`) -- no GHCR
-      # image is ever pulled. Do NOT re-add the GHCR build-push or an explicit
-      # "Trigger Komodo deploy" step; the arm64 leg alone cost ~13 min under
-      # QEMU (plus `playwright install chromium`) for an image nothing uses.
+      # Deploy happens off the push below: compose.yaml builds from source
+      # (`build: .`), so no registry image is pulled. Do NOT re-add an image
+      # build-push or an explicit deploy trigger step; the arm64 leg alone cost
+      # ~13 min under QEMU (plus `playwright install chromium`) for an image
+      # nothing uses.
       - name: Push
         run: |
           git push origin main
