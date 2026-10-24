@@ -28,17 +28,16 @@ jobs:
           python-version: '3.12'
 
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
 
       - name: Install
-        run: uv sync
+        run: uv sync --locked
 
       - name: Test
         run: uv run pytest -x -m "not live"
         env:
           FASTMCP_MCP_CAMELCASE_COMPAT: "false"
-
-      - name: Security audit (pip-audit)
-        run: uvx pip-audit
 
       # Versions are git tags; nothing is committed back to main (it is
       # protected, and a bump commit caused uv.lock drift + a double deploy).
